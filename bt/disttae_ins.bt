@@ -1,0 +1,1 @@
+BEGIN { printf("Hello, motrace!\n"); }
