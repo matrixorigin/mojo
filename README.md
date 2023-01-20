@@ -1,4 +1,19 @@
 # mojo
+mojo is the magic mo debugging tool
+
+## bt: bpftrace
+The bt dir contains a bunch of bpftrace scripts.
+
+## mojo
+This is a go command line for debugging matrixone, esp, error log
+ananlysis.
+
+Some analysis may output graph/pictures.  mojo use sixel to display
+graphics in terminal.  You need to install gnuplot 5.4 on local the
+machine that mojo runs on and use a terminal that support sixel.
+PuTTY, mintty, iTerm2 are known to work with sixel.  Ssh is OK :)
+
+## What is mojo
 mojo
 
 ```
