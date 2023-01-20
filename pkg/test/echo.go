@@ -28,10 +28,10 @@ func Gnuplot(c *ishell.Context) {
 	if err != nil {
 		c.Println("Error:", err)
 	}
-	c.Print(string(output))
+	c.Println(string(output))
 }
 
-func BuildCmd() *ishell.Cmd {
+func BuildCmd(sh *ishell.Shell) {
 	testCmd := &ishell.Cmd{
 		Name: "test",
 		Help: "dev/test only",
@@ -46,5 +46,5 @@ func BuildCmd() *ishell.Cmd {
 		Help: "gnuplot sixel output",
 		Func: Gnuplot,
 	})
-	return testCmd
+	sh.AddCmd(testCmd)
 }
