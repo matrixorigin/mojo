@@ -1,11 +1,10 @@
 package test
 
 import (
-	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/abiosoft/ishell/v2"
+	"github.com/matrixorigin/mojo/pkg/common"
 )
 
 func Echo(c *ishell.Context) {
@@ -14,21 +13,7 @@ func Echo(c *ishell.Context) {
 }
 
 func Gnuplot(c *ishell.Context) {
-	f, err := os.Create("/tmp/mojo.gnuplot")
-	if err != nil {
-		c.Println("Error:", err)
-	}
-
-	f.WriteString("set terminal sixelgd\n")
-	f.WriteString("plot sin(x)\n")
-	f.Close()
-
-	gcmd := exec.Command("/usr/bin/gnuplot", "/tmp/mojo.gnuplot")
-	output, err := gcmd.Output()
-	if err != nil {
-		c.Println("Error:", err)
-	}
-	c.Println(string(output))
+	common.RunGnuplot(c, []string{"plot sin(x)"})
 }
 
 func BuildCmd(sh *ishell.Shell) {

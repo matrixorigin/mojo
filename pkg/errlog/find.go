@@ -10,21 +10,21 @@ import (
 	"github.com/matrixorigin/mojo/pkg/mo"
 )
 
-func logdate() string {
-	qd := common.GetVar("MOJO_LOGDATE")
-	qd = strings.ReplaceAll(qd, "-", "/")
-	return fmt.Sprintf("__mo_filepath like '%%/%s/%%'", qd)
-}
-
 func Find(c *ishell.Context) {
 	fs := flag.NewFlagSet("log.find", flag.ContinueOnError)
 	var limit, offset int
 	var desc bool
 	var pat, ipat, rpat string
+	var qd string
+	var tsa, tsz string
 
 	fs.StringVar(&pat, "like", "", "like pattern")
 	fs.StringVar(&ipat, "ilike", "", "ilike pattern")
 	fs.StringVar(&rpat, "rlike", "", "rlike pattern")
+
+	fs.StringVar(&qd, "qd", "", "query date")
+	fs.StringVar(&tsa, "tsa", "", "query timestamp range start")
+	fs.StringVar(&tsz, "tsz", "", "query timestamp range end")
 
 	fs.IntVar(&limit, "n", 10, "limit of output")
 	fs.IntVar(&offset, "x", 0, "offset of output")
@@ -46,7 +46,23 @@ func Find(c *ishell.Context) {
 		descStr = " desc "
 	}
 
-	qry := "select " + cols + " from system.log_info where " + logdate()
+	if tsa == "" && tsz == "" && qd == "" {
+		qd = common.GetVar("MOJO_LOGDATE")
+		qd = strings.ReplaceAll(qd, "-", "/")
+	}
+	if qd != "" {
+		qd = fmt.Sprintf(" and __mo_filepath like '%%/%s/%%' ", qd)
+	}
+
+	if tsa != "" {
+		tsa = fmt.Sprintf(" and timestamp >= '%s' ", tsa)
+	}
+
+	if tsz != "" {
+		tsa = fmt.Sprintf(" and timestamp <= '%s' ", tsz)
+	}
+
+	qry := "select " + cols + " from system.log_info where true " + qd + tsa + tsz
 	if pat != "" {
 		qry = qry + fmt.Sprintf(" and message like '%%%s%%' ", pat)
 	}

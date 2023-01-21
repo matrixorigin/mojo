@@ -3,6 +3,7 @@ package mo
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -92,7 +93,7 @@ func Query(sql string, params ...any) (string, error) {
 	return sb.String(), nil
 }
 
-func QToken(tokens []string) (string, error) {
+func token2q(tokens []string) (string, []any) {
 	var tks []string
 	var params []any
 	for _, v := range tokens {
@@ -108,5 +109,40 @@ func QToken(tokens []string) (string, error) {
 		}
 	}
 	qry := strings.Join(tks, " ")
+	return qry, params
+}
+
+func QToken(tokens []string) (string, error) {
+	qry, params := token2q(tokens)
 	return Query(qry, params...)
+}
+
+func QSave(tokens []string, f *os.File) error {
+	sql, params := token2q(tokens)
+	rows, err := db.Query(sql, params...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+
+	ncol := len(cols)
+	if ncol == 0 {
+		return nil
+	}
+
+	for rows.Next() {
+		row := make([]interface{}, ncol)
+		data := make([]string, ncol)
+		for i := 0; i < ncol; i++ {
+			row[i] = &data[i]
+		}
+		rows.Scan(row...)
+		f.WriteString(strings.Join(data, ",") + "\n")
+	}
+	return nil
 }

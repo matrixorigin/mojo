@@ -1,6 +1,9 @@
 package mo
 
 import (
+	"flag"
+	"os"
+
 	"github.com/abiosoft/ishell/v2"
 )
 
@@ -10,6 +13,26 @@ func MoCmd(c *ishell.Context) {
 		c.Println("Error:", err)
 	} else {
 		c.Println(res)
+	}
+}
+
+func MoSave(c *ishell.Context) {
+	fs := flag.NewFlagSet("mo.save", flag.ContinueOnError)
+	var ofn string
+	fs.StringVar(&ofn, "o", "/tmp/mojo.data", "save to output file")
+
+	if err := fs.Parse(c.Args); err != nil {
+		c.Println()
+	}
+
+	f, err := os.Create(ofn)
+	if err != nil {
+		c.Println("Error:", err)
+	}
+	defer f.Close()
+
+	if err = QSave(fs.Args(), f); err != nil {
+		c.Println("Error:", err)
 	}
 }
 
@@ -98,5 +121,14 @@ func BuildCmd(sh *ishell.Shell) {
 		Help: "delete query",
 		Func: MoDelete,
 	})
-
+	sh.AddCmd(&ishell.Cmd{
+		Name: "save",
+		Help: "save query result",
+		Func: MoSave,
+	})
+	sh.AddCmd(&ishell.Cmd{
+		Name: "plot",
+		Help: "plot saved query result",
+		Func: XyPlot,
+	})
 }
