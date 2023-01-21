@@ -10,12 +10,6 @@ import (
 
 var PrintHelp bool
 var Verbose bool
-var MoHost string
-var MoPort string
-var MoAccount string
-var MoDb string
-var MoUser string
-var MoPasswd string
 
 var moVar map[string]string
 
@@ -30,13 +24,14 @@ func supplyDefault(v, name, dflt string) string {
 }
 
 func ParseFlags() {
+	var moHost, moPort, moUser, moPasswd, moDb string
 	flag.BoolVar(&PrintHelp, "help", false, "print help")
 	flag.BoolVar(&Verbose, "v", false, "verbose mode")
-	flag.StringVar(&MoHost, "h", "", "mo host/ip, default to $MOJO_MOHOST or localhost if not set")
-	flag.StringVar(&MoPort, "p", "", "mo port, default to $MOJO_MOPORT or 6001 if not set")
-	flag.StringVar(&MoUser, "u", "", "mo user, default to $MOJO_MOUSER or dump if not set")
-	flag.StringVar(&MoPasswd, "passwd", "", "mo password, default to $MOJO_MOPASSWD or 111 if not set")
-	flag.StringVar(&MoDb, "d", "", "mo database, default to $MOJO_MODB or mysql if not set")
+	flag.StringVar(&moHost, "h", "", "mo host/ip, default to $MOJO_MOHOST or localhost if not set")
+	flag.StringVar(&moPort, "p", "", "mo port, default to $MOJO_MOPORT or 6001 if not set")
+	flag.StringVar(&moUser, "u", "", "mo user, default to $MOJO_MOUSER or dump if not set")
+	flag.StringVar(&moPasswd, "passwd", "", "mo password, default to $MOJO_MOPASSWD or 111 if not set")
+	flag.StringVar(&moDb, "d", "", "mo database, default to $MOJO_MODB or mysql if not set")
 
 	// parse os.Args[1:]
 	flag.Parse()
@@ -44,14 +39,14 @@ func ParseFlags() {
 		flag.PrintDefaults()
 	}
 
-	// fill in defaults
-	MoHost = supplyDefault(MoHost, "MOJO_MOHOST", "localhost")
-	MoPort = supplyDefault(MoPort, "MOJO_MOPORT", "6001")
-	MoUser = supplyDefault(MoUser, "MOJO_MOUSER", "dump")
-	MoPasswd = supplyDefault(MoPasswd, "MOJO_MOPASSWD", "111")
-	MoDb = supplyDefault(MoDb, "MOJO_MODB", "mysql")
-
 	moVar = make(map[string]string)
+	// fill in defaults
+	moVar["MOHOST"] = supplyDefault(moHost, "MOJO_MOHOST", "localhost")
+	moVar["MOPORT"] = supplyDefault(moPort, "MOJO_MOPORT", "6001")
+	moVar["MOUSER"] = supplyDefault(moUser, "MOJO_MOUSER", "dump")
+	moVar["MOPASSWD"] = supplyDefault(moPasswd, "MOJO_MOPASSWD", "111")
+	moVar["MODB"] = supplyDefault(moDb, "MOJO_MODB", "mysql")
+
 }
 
 // command: set XXX value

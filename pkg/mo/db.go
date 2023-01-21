@@ -13,15 +13,19 @@ import (
 
 var db *sql.DB
 
-func Open() {
+func Open() error {
 	var err error
+	if db != nil {
+		db.Close()
+	}
+
 	connstr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
-		common.MoUser, common.MoPasswd,
-		common.MoHost, common.MoPort,
-		common.MoDb)
+		common.GetVar("MOUSER"), common.GetVar("MOPASSWD"),
+		common.GetVar("MOHOST"), common.GetVar("MOPORT"),
+		common.GetVar("MODB"))
 	db, err = sql.Open("mysql", connstr)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	// go sql weird stuff
@@ -32,8 +36,11 @@ func Open() {
 
 	// immediately set some of the most freq used vars
 	qd, err := QueryVal("select current_date")
-	common.PanicIf(err)
+	if err != nil {
+		return err
+	}
 	common.SetVar("MOJO_LOGDATE", qd)
+	return nil
 }
 
 func Exec(sql string, params ...any) error {

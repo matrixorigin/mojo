@@ -7,6 +7,12 @@ import (
 	"github.com/abiosoft/ishell/v2"
 )
 
+func MoConnect(c *ishell.Context) {
+	if err := Open(); err != nil {
+		c.Println("Error:", err)
+	}
+}
+
 func MoCmd(c *ishell.Context) {
 	res, err := QToken(c.Args)
 	if err != nil {
@@ -91,6 +97,11 @@ func MoUpdate(c *ishell.Context) {
 // command to send sql directy.  Note that we only take
 // lower case.
 func BuildCmd(sh *ishell.Shell) {
+	sh.AddCmd(&ishell.Cmd{
+		Name: "connect",
+		Help: "connect to database",
+		Func: MoConnect,
+	})
 	sh.AddCmd(&ishell.Cmd{
 		Name: "mo",
 		Help: "genric mo command/sql",

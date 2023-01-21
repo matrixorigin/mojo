@@ -12,6 +12,8 @@ import (
 func main() {
 	common.ParseFlags()
 	shell := ishell.New()
+	shell.SetHomeHistoryPath(".mojo_history")
+
 	// open a database connection, must be after parse flags.
 	mo.Open()
 
