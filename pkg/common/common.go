@@ -79,10 +79,13 @@ func GetVarOr(k, dflt string) string {
 
 func ShowCmd(c *ishell.Context) {
 	if len(c.Args) == 0 {
+		for k, v := range moVar {
+			c.Println(k, " = ", v)
+		}
 		return
 	}
 	k := c.Args[0]
-	c.Println(k, "=", GetVar(k))
+	c.Println(k, " = ", GetVar(k))
 }
 
 func BuildCmd(sh *ishell.Shell) {

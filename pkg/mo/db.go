@@ -40,6 +40,8 @@ func Open() error {
 		return err
 	}
 	common.SetVar("MOJO_LOGDATE", qd)
+	qd = strings.ReplaceAll(qd, "-", "/")
+	common.SetVar("MOJO_MOPATH", fmt.Sprintf(" __mo_filepath like '%%/%s/%%' ", qd))
 	return nil
 }
 
@@ -103,14 +105,21 @@ func Query(sql string, params ...any) (string, error) {
 func token2q(tokens []string) (string, []any) {
 	var tks []string
 	var params []any
+	// poorman's macro
 	for _, v := range tokens {
 		if len(v) >= 2 && v[0] == ':' && v[len(v)-1] == ':' {
+			// :FOO: will expand FOO
 			vk := v[1 : len(v)-1]
 			tks = append(tks, common.GetVar(vk))
 		} else if len(v) >= 2 && v[0] == '?' && v[len(v)-1] == '?' {
+			// ?FOO? will bind FOO as param
 			vk := v[1 : len(v)-1]
 			tks = append(tks, "?")
 			params = append(params, common.GetVar(vk))
+		} else if len(v) >= 2 && v[0] == '$' && v[len(v)-1] == '$' {
+			// $FOO$ will become 'FOO', to work around ishell quote
+			vk := v[1 : len(v)-1]
+			tks = append(tks, "'"+vk+"'")
 		} else {
 			tks = append(tks, v)
 		}
