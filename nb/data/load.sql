@@ -8,6 +8,8 @@ create table movies (
     US_DVD_Sales int,
     Production_Budget int,
     -- data is in 'Jan 1 2000' format, use varchar to load.
+    -- chatgpt tells us that we can convert it to date using
+    -- str_to_date(Release_Date, '%b %d %Y')
     Release_Date varchar(50), 
     MPAA_Rating varchar(5),
     Running_Time_min int,
