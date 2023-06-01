@@ -1,3 +1,7 @@
+import sqlalchemy
+from sqlalchemy import create_engine
+from vega_datasets import local_data, data
+
 def import_motr():
     import os
     import sys
@@ -8,3 +12,15 @@ def import_motr():
 
     import motr
 
+def load_vega_datasets():
+    e = create_engine('mysql+pymysql://dump:111@localhost:6001/mojo')
+    datasets = local_data.list_datasets()
+    for d in datasets:
+        tbl = d.replace('-', '_')
+        print("loading {0} into {1}".format(d, tbl))
+        df = data(d)
+        df.to_sql(tbl, e, if_exists='replace', index=False)
+
+
+if __name__ == "__main__":
+    load_vega_datasets()
