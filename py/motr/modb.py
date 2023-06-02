@@ -1,14 +1,11 @@
 # open a mysql connection
 
-import pymysql
-
-def connect(host, port, user, password, database):
-    return Conn(host, port, user, password, database)
+from sqlalchemy import create_engine
+import pandas
 
 class Conn:
-    def __init__(self, host, port, user, password, database):
-        self.conn = pymysql.connect(host=host, port=port, user=user, password=password, database=database)
-        self.cursor = self.conn.cursor()
+    def __init__(self, connstr): 
+        self.eng = create_engine(connstr)
         self.nexttmp = 0
         self.xts = {}
 
@@ -25,12 +22,11 @@ class Conn:
         self.nexttmp += 1 
         return "tmp_{0}".format(self.nexttmp)
 
-    def query(self, sql):
-        self.cursor.execute(sql)
-        return self.cursor.fetchall()
+    def query(self, sql):   
+        return pandas.read_sql(sql, self.eng)
 
     def close(self):
-        self.conn.close()
+        self.eng.dispose()
 
     def build_query(self, qry, alias=""):
         xt = Table(self, qry, alias)
