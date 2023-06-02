@@ -45,6 +45,12 @@ class Conn:
             alias = t
         return self.from_sql("select * from " + t, alias)
 
+    def from_pd(self, df, alias=""):
+        if alias == "":
+            alias = self.next_tmpname()
+        df.to_sql("motr_tmp_" + alias, self.eng, if_exists='replace', index=False)
+        return self.from_table("motr_tmp_" + alias, alias)
+
 class Table:
     def __init__(self, conn, origsql="", alias=""):
         self.conn = conn
