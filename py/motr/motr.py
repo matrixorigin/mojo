@@ -1,6 +1,7 @@
 import altair as alt
 import pandas as pd
 from . import modb
+from .transformer import Transformer
 
 # MO connection object
 __CONN__ = None
@@ -18,8 +19,8 @@ def build_query(qry, alias=""):
     return __CONN__.build_query(qry, alias)
 
 def transform_chart(chart):
-    dict = chart.to_dict()
-    return alt.Chart.from_dict(dict)
+    tr = Transformer(__CONN__)
+    return tr.transform(chart)
 
 def enable(connstr):
     global __CONN__
