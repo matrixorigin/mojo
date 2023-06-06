@@ -23,8 +23,10 @@ line = alt.Chart(df).transform_window(
     y='ymean:Q'
 )
 
-print(line.to_json())
+# print(line.to_json())
 
 chart = points + line
-chart.save("chart.png")
+chart
+
+# chart.save("chart.png")
 
