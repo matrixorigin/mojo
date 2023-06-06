@@ -9,7 +9,7 @@ from vega_datasets import local_data, data
 def motr_init():
     motr.enable('mysql+pymysql://dump:111@localhost:6001/mojo')
 
-def test_simple_bar_char(motr_init):
+def test_simple_bar_chart(motr_init):
     source = pd.DataFrame({
             'a': ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'],
                 'b': [28, 55, 43, 91, 81, 53, 19, 87, 52]

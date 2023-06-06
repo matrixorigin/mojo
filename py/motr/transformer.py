@@ -4,10 +4,15 @@ class Transformer:
     def __init__(self, conn):
         self.conn = conn
 
-    def extract_transform(self, chart):
+    def extract_encoding_transform(self, chart):
+        """ Extract transform from encodings """
+        if 'encoding' not in chart:
+            return chart
+        # NYI
         return chart
 
     def do_transform(self, chart):
+        chart = self.extract_encoding_transform(chart)
         return chart
 
     # mo_exec will run the xtable query and replace data with result
