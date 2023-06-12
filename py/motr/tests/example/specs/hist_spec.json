@@ -1,0 +1,170 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.8.0.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300
+    }
+  },
+  "data": {
+    "name": "data-ce7e0ec1b9d7204ba78411285856b024"
+  },
+  "datasets": {
+    "data-ce7e0ec1b9d7204ba78411285856b024": [
+      {
+        "x": 0.9296160928171479
+      },
+      {
+        "x": 0.3163755545817859
+      },
+      {
+        "x": 0.18391881167709445
+      },
+      {
+        "x": 0.2045602785530397
+      },
+      {
+        "x": 0.5677250290816866
+      },
+      {
+        "x": 0.5955447029792516
+      },
+      {
+        "x": 0.9645145197356216
+      },
+      {
+        "x": 0.6531770968715709
+      },
+      {
+        "x": 0.7489066375339118
+      },
+      {
+        "x": 0.6535698708517353
+      },
+      {
+        "x": 0.7477148092712739
+      },
+      {
+        "x": 0.9613067360728214
+      },
+      {
+        "x": 0.00838829794155349
+      },
+      {
+        "x": 0.10644437669771933
+      },
+      {
+        "x": 0.29870371376938154
+      },
+      {
+        "x": 0.65641118308227
+      },
+      {
+        "x": 0.8098125525409348
+      },
+      {
+        "x": 0.872175913724283
+      },
+      {
+        "x": 0.9646475973719302
+      },
+      {
+        "x": 0.7236853469199535
+      }
+    ]
+  },
+  "encoding": {
+    "x": {
+      "bin": true,
+      "field": "x",
+      "type": "quantitative"
+    },
+    "y": {
+      "aggregate": "count",
+      "type": "quantitative"
+    }
+  },
+  "mark": {
+    "type": "bar"
+  }
+}
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.8.0.json",
+  "config": {
+    "view": {
+      "continuousHeight": 300,
+      "continuousWidth": 300
+    }
+  },
+  "data": {
+    "name": "data-3491ce81051d121f6953852cd870c9e7"
+  },
+  "datasets": {
+    "data-3491ce81051d121f6953852cd870c9e7": [
+      {
+        "__count": 1,
+        "x_binned": 0.0,
+        "x_binned2": 0.1
+      },
+      {
+        "__count": 2,
+        "x_binned": 0.1,
+        "x_binned2": 0.2
+      },
+      {
+        "__count": 2,
+        "x_binned": 0.2,
+        "x_binned2": 0.30000000000000004
+      },
+      {
+        "__count": 1,
+        "x_binned": 0.30000000000000004,
+        "x_binned2": 0.4
+      },
+      {
+        "__count": 2,
+        "x_binned": 0.5,
+        "x_binned2": 0.6000000000000001
+      },
+      {
+        "__count": 3,
+        "x_binned": 0.6000000000000001,
+        "x_binned2": 0.7000000000000001
+      },
+      {
+        "__count": 3,
+        "x_binned": 0.7000000000000001,
+        "x_binned2": 0.8
+      },
+      {
+        "__count": 2,
+        "x_binned": 0.8,
+        "x_binned2": 0.9
+      },
+      {
+        "__count": 4,
+        "x_binned": 0.9,
+        "x_binned2": 1.0
+      }
+    ]
+  },
+  "encoding": {
+    "x": {
+      "bin": "binned",
+      "field": "x_binned",
+      "title": "x (binned)",
+      "type": "quantitative"
+    },
+    "x2": {
+      "field": "x_binned2"
+    },
+    "y": {
+      "field": "__count",
+      "title": "Count of Records",
+      "type": "quantitative"
+    }
+  },
+  "mark": {
+    "type": "bar"
+  }
+}

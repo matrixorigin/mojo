@@ -101,3 +101,6 @@ class Table:
     def execute(self):
         self.build_sql()
         return self.conn.query(self.sql)
+
+    def transform_bin(self, opts):
+        return self, False
