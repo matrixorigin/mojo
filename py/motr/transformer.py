@@ -11,7 +11,9 @@ class Transformer:
 
         newdata, ok = None, False
         if 'bin' in transform:
-            newdata, ok = xt.transform_bin(transform)
+            newxt, ok = xt.transform_bin(transform)
+            if ok:
+                newdata = {'url': 'motr://' + newxt.alias}
 
         if not ok:
             return chart, data, False
@@ -22,28 +24,58 @@ class Transformer:
     # extract bin transform from encoding
     def transform_bin_encoding(self, chart, data, encoding):
         binop = {'aggregate': []}
+        newencoding = {}
 
         for k in encoding:
-            if 'bin' in encoding[k] and encoding[k]['bin'] == True:
-                binop['bin'] = encoding[k]['bin']
-                binop['field'] = encoding[k]['field']
+            ek = encoding[k]
+            if 'bin' in ek and ek['bin'] == True:
+                binop['bin'] = ek['bin']
+                binop['field'] = ek['field']
                 for opt in 'as', 'anchor', 'base', 'binned', 'devide', 'extent', 'maxbins', 'minstep', 'nice', 'step', 'steps':
-                    if opt in encoding[k]:
-                        binop[opt] = encoding[k][opt] 
+                    if opt in ek: 
+                        binop[opt] = ek[opt] 
+
+                # redirect newencoding to columns after transform.
+                # make a copy so that if transform failed we do not mess up
+                # old encoding.
+                newencoding[k] = ek.copy()
+                newencoding[k]['bin'] = 'binned'
+                newencoding[k]['field'] = ek['field'] + '_binned'
+                if 'title' in ek:
+                    newencoding[k]['title'] = ek['title']
+                else:
+                    newencoding[k]['title'] = ek['field'] + ' (binned)'
+                if k == 'x' or k == 'y':
+                    newencoding[k + '2'] = {'field': ek['field'] + '_binned2'}
 
             # transform aggregate as well
-            if 'aggregate' in encoding[k]:
+            if 'aggregate' in ek:
                 aggop = {}
                 for opt in ['aggregate', 'field', 'as', 'groupby']: 
-                    if opt in encoding[k]:
-                        aggop[opt] = encoding[k][opt]
+                    if opt in ek:
+                        aggop[opt] = ek[opt]
                 binop['aggregate'].append(aggop) 
+
+                # redirect agg to columns after transform.
+                newencoding[k] = ek.copy()
+                del newencoding[k]['aggregate']
+                if 'field' in ek:
+                    newencoding[k]['field'] = '__' + ek['aggregate'] + '_' + ek['field']
+                    newencoding[k]['title'] = ek['aggregate'] + ' of ' + ek['field']
+                else:
+                    newencoding[k]['field'] = '__' + ek['aggregate']
+                    newencoding[k]['title'] = ek['aggregate'] + ' of Records'
 
         if 'bin' not in binop:
             return chart, data
         else:
-            newchart, newdata, _ = self.do_one_transform(chart, data, binop)
-            return newchart, newdata
+            newchart, newdata, ok = self.do_one_transform(chart, data, binop)
+            if ok:
+                newchart['encoding'] = newencoding
+                return newchart, newdata
+            else:
+                # transform failed, return original chart
+                return chart, data
 
     def transform_encoding(self, chart, data):
         """ Extract transform from encodings """
@@ -85,7 +117,7 @@ class Transformer:
             return chart
         data = chart['data']
 
-        if 'trnasform' in chart:
+        if 'transform' in chart:
             transforms = chart['transform']
             remaining = []
             for i in range(len(transforms)):

@@ -16,4 +16,8 @@ def test_simple_hist(motr_init):
             y='count()',
     )
     chart = motr.transform_chart(chart)
+    print(chart.to_json())
     chart.save("simple_hist_chart.png")
+
+if __name__ == "__main__":
+    pytest.main([__file__])

@@ -88,7 +88,7 @@ class Table:
     # build a valid sql query string
     def build_sql(self): 
         if self.sql != None:
-            return
+            return self.sql
         rsql = self.resolve_col(self.origsql)
         if self.inputs == None or len(self.inputs) == 0:
             self.sql = rsql
@@ -97,10 +97,58 @@ class Table:
             self.sql += ",\n".join([xtn + " as (" + self.conn.getxt(xtn).sql + ")" for xtn in self.inputs])
             self.sql += "\n"
             self.sql += rsql
-    
+        return self.sql
+
     def execute(self):
         self.build_sql()
         return self.conn.query(self.sql)
 
     def transform_bin(self, opts):
-        return self, False
+        # This is the number of bins version. 
+        # TODO: add step size version
+        if 'step' in opts:
+            return self, False
+
+        # decide number of bins
+        if 'maxbins' in opts:
+            numbins = opts['maxbins']
+        else:
+            numbins = 10
+
+        selfsql = self.build_sql()
+        
+        sql = f"""
+            WITH 
+            minmax AS ( select min({opts['field']}) as minval, max({opts['field']}) as maxval, 
+                        (max({opts['field']}) - min({opts['field']})) / {numbins} as binwidth 
+                        from ({selfsql}) {self.alias} ),
+            binned AS ( select case when minmax.binwidth = 0 then 0
+                                    else floor(({opts['field']} - minmax.minval) / minmax.binwidth) end as {opts['field']}_binnumber, 
+                               minmax.minval + case when minmax.binwidth = 0 then 0 
+                                    else minmax.binwidth * floor(({opts['field']} - minmax.minval) / minmax.binwidth) 
+                                    end as {opts['field']}_binned,
+                               minmax.minval + minmax.binwidth + case when minmax.binwidth = 0 then 0 
+                                    else minmax.binwidth * floor(({opts['field']} - minmax.minval) / minmax.binwidth) 
+                                    end as {opts['field']}_binned2,
+                                {self.alias}.* 
+                        from ({selfsql}) {self.alias}, minmax )
+            """
+
+        if 'aggregate' not in opts:
+            sql += "select * from binned"
+        else:
+            sql += f""" select any_value({opts['field']}_binned) as {opts['field']}_binned, 
+                            any_value({opts['field']}_binned2) as {opts['field']}_binned2 """
+            for agg in opts['aggregate']:
+                if 'field' not in agg:
+                    aggcol = "1"
+                    aggcolAs = f"__{agg['aggregate']}"
+                else:
+                    aggcol = agg['field']
+                    aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
+                sql += f""", {agg['aggregate']}({aggcol}) as {aggcolAs} """
+            sql += f""" from binned group by {opts['field']}_binnumber """
+
+        # debug
+        # print(sql)
+        return self.conn.from_sql(sql, self.alias + "_binned"), True
