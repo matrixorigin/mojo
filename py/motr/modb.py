@@ -113,7 +113,7 @@ class Table:
         self.build_sql()
         return self.conn.query(self.sql)
 
-    def transform_bin(self, field, maxbins=10, step=None, aggregate=None, **kwargs):
+    def transform_bin(self, field, maxbins=10, step=None, **kwargs):
         # This is the number of bins version. 
         # TODO: add step size version
         if step is not None: 
@@ -135,23 +135,30 @@ class Table:
                                     end as {field}_binned2,
                                 {self.alias}.* 
                         from ({selfsql}) {self.alias}, minmax )
+            select * from binned
             """
-
-        if aggregate is None:
-            sql += "select * from binned"
-        else:
-            sql += f""" select any_value({field}_binned) as {field}_binned, 
-                            any_value({field}_binned2) as {field}_binned2 """
-            for agg in aggregate:
-                if 'field' not in agg:
-                    aggcol = "1"
-                    aggcolAs = f"__{agg['aggregate']}"
-                else:
-                    aggcol = agg['field']
-                    aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
-                sql += f""", {agg['aggregate']}({aggcol}) as {aggcolAs} """
-            sql += f""" from binned group by {field}_binnumber """
-
         # debug
         # print(sql)
         return self.conn.from_sql(sql, self.alias + "_binned"), True
+
+    def transform_aggregate(self, groupby=[], aggregate=[], **kwargs): 
+        selfsql = self.build_sql()
+        sql = 'SELECT '
+        sql += ' , '.join([gb + ' as ' + gb for gb in groupby])
+       
+        for agg in aggregate:
+            if 'field' not in agg:
+                aggcol = "1"
+                aggcolAs = f"__{agg['aggregate']}"
+            else:
+                aggcol = agg['field']
+                aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
+            sql += f""", {agg['aggregate']}({aggcol}) as {aggcolAs} """
+
+        sql += f""" FROM ({selfsql}) {self.alias} """
+        if len(groupby) > 0:
+            sql += f""" GROUP BY {', '.join(groupby)} """
+
+        # debug
+        # print(sql)
+        return self.conn.from_sql(sql, self.alias + "_aggregated"), True

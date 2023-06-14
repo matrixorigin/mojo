@@ -12,18 +12,23 @@ class Transformer:
         newdata, ok = None, False
         if 'bin' in transform:
             newxt, ok = xt.transform_bin(**transform)
-            if ok:
-                newdata = {'url': 'motr://' + newxt.alias}
-
+        elif 'aggregate' in transform:
+            newxt, ok = xt.transform_aggregate(**transform)
+        else:
+            # NYI
+            pass
+        
         if not ok:
             return chart, data, False
         else:
+            newdata = newxt.urldata()
             chart['data'] = newdata
             return chart, newdata, True
 
     # extract bin transform from encoding
     def transform_bin_encoding(self, chart, data, encoding):
-        binop = {'aggregate': []}
+        binop = {}
+        aggops = {'aggregate': [], 'groupby': []} 
         newencoding = {}
 
         for k in encoding:
@@ -38,15 +43,20 @@ class Transformer:
                 # redirect newencoding to columns after transform.
                 # make a copy so that if transform failed we do not mess up
                 # old encoding.
+                binned = ek['field'] + '_binned'
+                binned2 = ek['field'] + '_binned2'
                 newencoding[k] = ek.copy()
                 newencoding[k]['bin'] = 'binned'
-                newencoding[k]['field'] = ek['field'] + '_binned'
+                newencoding[k]['field'] = binned
                 if 'title' in ek:
                     newencoding[k]['title'] = ek['title']
                 else:
                     newencoding[k]['title'] = ek['field'] + ' (binned)'
                 if k == 'x' or k == 'y':
-                    newencoding[k + '2'] = {'field': ek['field'] + '_binned2'}
+                    newencoding[k + '2'] = {'field': binned2} 
+                # add groupby
+                aggops['groupby'].append(binned)
+                aggops['groupby'].append(binned2)
 
             # transform aggregate as well
             if 'aggregate' in ek:
@@ -54,7 +64,7 @@ class Transformer:
                 for opt in ['aggregate', 'field', 'as', 'groupby']: 
                     if opt in ek:
                         aggop[opt] = ek[opt]
-                binop['aggregate'].append(aggop) 
+                aggops['aggregate'].append(aggop) 
 
                 # redirect agg to columns after transform.
                 newencoding[k] = ek.copy()
@@ -70,6 +80,9 @@ class Transformer:
             return chart, data
         else:
             newchart, newdata, ok = self.do_one_transform(chart, data, binop)
+            if ok and len(aggops['aggregate']) > 0:
+                newchart, newdata, ok = self.do_one_transform(newchart, newdata, aggops) 
+
             if ok:
                 newchart['encoding'] = newencoding
                 return newchart, newdata
