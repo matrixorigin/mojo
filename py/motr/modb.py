@@ -55,6 +55,22 @@ class Conn:
         df.to_sql("motr_tmp_" + alias, self.eng, if_exists='replace', index=False)
         return self.from_table("motr_tmp_" + alias, cols=None, alias=alias)
 
+
+# utility functions
+def gen_aggcol_as(agg):
+    aggop = agg['aggregate']
+    if aggop == 'mean':
+        aggop = 'avg'
+
+    if 'field' not in agg:
+        aggcol = "1"
+        aggcolAs = f"__{agg['aggregate']}" 
+    else:
+        aggcol = agg['field']
+        aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
+    return aggop, aggcol, aggcolAs
+
+
 class Table:
     def __init__(self, conn, origsql="", alias=""):
         self.conn = conn
@@ -144,16 +160,16 @@ class Table:
     def transform_aggregate(self, groupby=[], aggregate=[], **kwargs): 
         selfsql = self.build_sql()
         sql = 'SELECT '
-        sql += ' , '.join([gb + ' as ' + gb for gb in groupby])
-       
+        if len(groupby) > 0:
+            sql += ' , '.join([gb + ' as ' + gb for gb in groupby])
+            sep = ', '
+        else:
+            sep = ''
+
         for agg in aggregate:
-            if 'field' not in agg:
-                aggcol = "1"
-                aggcolAs = f"__{agg['aggregate']}"
-            else:
-                aggcol = agg['field']
-                aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
-            sql += f""", {agg['aggregate']}({aggcol}) as {aggcolAs} """
+            aggop, aggcol, aggcolAs = gen_aggcol_as(agg)
+            sql += f"""{sep}{aggop}({aggcol}) as {aggcolAs} """
+            sep = ', '
 
         sql += f""" FROM ({selfsql}) {self.alias} """
         if len(groupby) > 0:

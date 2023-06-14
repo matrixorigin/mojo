@@ -1,5 +1,7 @@
 import altair as alt
 
+from .modb import gen_aggcol_as
+
 class Transformer:
     def __init__(self, conn):
         self.conn = conn
@@ -24,6 +26,34 @@ class Transformer:
             newdata = newxt.urldata()
             chart['data'] = newdata
             return chart, newdata, True
+
+    def transform_aggregate_encoding(self, chart, data, encoding):
+        newencoding = {}
+        aggops = {'aggregate': [], 'groupby': []}
+        for k in encoding:
+            ek = encoding[k]
+            if 'aggregate' in ek:
+                _, _, aggcolAs = gen_aggcol_as(ek)
+                aggops['aggregate'].append(ek)
+                newencoding[k] = ek.copy()
+                del newencoding[k]['aggregate']
+                if 'field' in ek:
+                    newencoding[k]['field'] = aggcolAs
+                    newencoding[k]['title'] = aggcolAs + ' of ' + ek['field']
+                else:
+                    newencoding[k]['field'] = aggcolAs
+                    newencoding[k]['title'] = ek['aggregate'] + ' of Records'
+            else:
+                if 'field' in ek:
+                    aggops['groupby'].append(ek['field'])
+                newencoding[k] = ek.copy()
+
+        newchart, newdata, ok = self.do_one_transform(chart, data, aggops)
+        if ok:
+            newchart['encoding'] = newencoding
+            return newchart, newdata
+        else:
+            return chart, data
 
     # extract bin transform from encoding
     def transform_bin_encoding(self, chart, data, encoding):
@@ -98,27 +128,26 @@ class Transformer:
         # A list of known tranformas
         trs = {'bin': 0, 
                'aggregate': 0, 
-               'timeUnit': 0, 
-               'stack': 0, 
-               'impute': 0, 
-               'sort': 0, 
-               'filter': 0, 
-               'calculate': 0, 
-               'lookup': 0, 
-               'fold': 0, 
-               'flatten': 0, 
-               'quantile': 0, 
-               'unknow': 0,
-               }
-
+               'other': 0
+            }
+        
         for k in chart['encoding']:
             if 'bin' in chart['encoding'][k]:
                 trs['bin'] += 1
-
-        # Handle first case, bin
+            elif 'aggregate' in chart['encoding'][k]:
+                trs['aggregate'] += 1
+            else:
+                trs['other'] += 1
+            
         newtr, newencoding = None, None
         if trs['bin'] == 1:
-            newchart, newdata = self.transform_bin_encoding(chart, data, chart['encoding'])
+            # Handle first case, bin.   We can bin only if all or none is aggregate. 
+            if trs['aggregate'] == 0 or trs['other'] == 0:
+                newchart, newdata = self.transform_bin_encoding(chart, data, chart['encoding'])
+                return newchart, newdata
+        elif trs['bin'] == 0 and trs['aggregate'] > 0:
+            # Handle aggregate
+            newchart, newdata = self.transform_aggregate_encoding(chart, data, chart['encoding'])
             return newchart, newdata
 
         # did not extract any transform
