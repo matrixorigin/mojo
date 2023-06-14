@@ -40,16 +40,20 @@ class Conn:
         self.xts[xt.alias] = xt
         return xt
     
-    def from_table(self, t, alias=""):
+    def from_table(self, t, cols = None, alias=""):
         if alias == "":
             alias = t
-        return self.from_sql("select * from " + t, alias)
+        if cols is None or len(cols) == 0:
+            return self.from_sql("select * from " + t, alias)
+        else:
+            colstr = " , ".join([c + " as " + c for c in cols])
+            return self.from_sql("select " + colstr + " from " + t, alias)
 
     def from_pd(self, df, alias=""):
         if alias == "":
             alias = self.next_tmpname()
         df.to_sql("motr_tmp_" + alias, self.eng, if_exists='replace', index=False)
-        return self.from_table("motr_tmp_" + alias, alias)
+        return self.from_table("motr_tmp_" + alias, cols=None, alias=alias)
 
 class Table:
     def __init__(self, conn, origsql="", alias=""):
@@ -60,6 +64,12 @@ class Table:
         self.alias = alias
         self.sql = None
         self.inputs = {}
+
+    def url(self):
+        return 'motr://' + self.alias
+    
+    def urldata(self):
+        return {'url': self.url()}
 
     # @x.y@ where x is a table alias, y is colname -> tablealias.colname
     # @@ will print out a single @
@@ -103,43 +113,36 @@ class Table:
         self.build_sql()
         return self.conn.query(self.sql)
 
-    def transform_bin(self, opts):
+    def transform_bin(self, field, maxbins=10, step=None, aggregate=None, **kwargs):
         # This is the number of bins version. 
         # TODO: add step size version
-        if 'step' in opts:
+        if step is not None: 
             return self, False
 
-        # decide number of bins
-        if 'maxbins' in opts:
-            numbins = opts['maxbins']
-        else:
-            numbins = 10
-
         selfsql = self.build_sql()
-        
         sql = f"""
             WITH 
-            minmax AS ( select min({opts['field']}) as minval, max({opts['field']}) as maxval, 
-                        (max({opts['field']}) - min({opts['field']})) / {numbins} as binwidth 
+            minmax AS ( select min({field}) as minval, max({field}) as maxval, 
+                        (max({field}) - min({field})) / {maxbins} as binwidth 
                         from ({selfsql}) {self.alias} ),
             binned AS ( select case when minmax.binwidth = 0 then 0
-                                    else floor(({opts['field']} - minmax.minval) / minmax.binwidth) end as {opts['field']}_binnumber, 
+                                    else floor(({field} - minmax.minval) / minmax.binwidth) end as {field}_binnumber, 
                                minmax.minval + case when minmax.binwidth = 0 then 0 
-                                    else minmax.binwidth * floor(({opts['field']} - minmax.minval) / minmax.binwidth) 
-                                    end as {opts['field']}_binned,
+                                    else minmax.binwidth * floor(({field} - minmax.minval) / minmax.binwidth) 
+                                    end as {field}_binned,
                                minmax.minval + minmax.binwidth + case when minmax.binwidth = 0 then 0 
-                                    else minmax.binwidth * floor(({opts['field']} - minmax.minval) / minmax.binwidth) 
-                                    end as {opts['field']}_binned2,
+                                    else minmax.binwidth * floor(({field} - minmax.minval) / minmax.binwidth) 
+                                    end as {field}_binned2,
                                 {self.alias}.* 
                         from ({selfsql}) {self.alias}, minmax )
             """
 
-        if 'aggregate' not in opts:
+        if aggregate is None:
             sql += "select * from binned"
         else:
-            sql += f""" select any_value({opts['field']}_binned) as {opts['field']}_binned, 
-                            any_value({opts['field']}_binned2) as {opts['field']}_binned2 """
-            for agg in opts['aggregate']:
+            sql += f""" select any_value({field}_binned) as {field}_binned, 
+                            any_value({field}_binned2) as {field}_binned2 """
+            for agg in aggregate:
                 if 'field' not in agg:
                     aggcol = "1"
                     aggcolAs = f"__{agg['aggregate']}"
@@ -147,7 +150,7 @@ class Table:
                     aggcol = agg['field']
                     aggcolAs = f"__{agg['aggregate']}_{agg['field']}"
                 sql += f""", {agg['aggregate']}({aggcol}) as {aggcolAs} """
-            sql += f""" from binned group by {opts['field']}_binnumber """
+            sql += f""" from binned group by {field}_binnumber """
 
         # debug
         # print(sql)

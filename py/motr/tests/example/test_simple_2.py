@@ -10,8 +10,8 @@ def motr_init():
 
 def test_simple_hist(motr_init):
     # Note that altair is case sensitive, alias the columns.
-    motr.from_sql('select imdb_rating as IMDB_Rating from movies', 'simple')
-    chart = alt.Chart('motr://simple').mark_bar().encode(
+    tbl = motr.from_table('movies', ['IMDB_Rating'])
+    chart = alt.Chart(tbl.url()).mark_bar().encode(
             alt.X("IMDB_Rating:Q", bin=True),
             y='count()',
     )

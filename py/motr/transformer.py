@@ -11,7 +11,7 @@ class Transformer:
 
         newdata, ok = None, False
         if 'bin' in transform:
-            newxt, ok = xt.transform_bin(transform)
+            newxt, ok = xt.transform_bin(**transform)
             if ok:
                 newdata = {'url': 'motr://' + newxt.alias}
 
@@ -164,8 +164,13 @@ class Transformer:
 
 
     # following altir_transform tranform_chart
-    def transform(self, chart):
+    def transform(self, chart, topLevel=True): 
+        # test if chart.config is undefined
         tr = chart.to_dict()
         tr = self.do_transform(tr)
         tr = self.mo_exec(tr)
+        if not topLevel:
+            for topKey in ['background', 'padding', 'autosize', 'config', '$schema']:
+                if topKey in tr:
+                    del tr[topKey]
         return alt.Chart.from_dict(tr)
