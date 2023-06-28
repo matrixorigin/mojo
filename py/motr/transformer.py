@@ -2,6 +2,7 @@ import altair as alt
 
 from .modb import gen_aggcol_as
 
+
 class Transformer:
     def __init__(self, conn):
         self.conn = conn
@@ -19,7 +20,7 @@ class Transformer:
         else:
             # NYI
             pass
-        
+
         if not ok:
             return chart, data, False
         else:
@@ -58,7 +59,7 @@ class Transformer:
     # extract bin transform from encoding
     def transform_bin_encoding(self, chart, data, encoding):
         binop = {}
-        aggops = {'aggregate': [], 'groupby': []} 
+        aggops = {'aggregate': [], 'groupby': []}
         newencoding = {}
 
         for k in encoding:
@@ -67,8 +68,8 @@ class Transformer:
                 binop['bin'] = ek['bin']
                 binop['field'] = ek['field']
                 for opt in 'as', 'anchor', 'base', 'binned', 'devide', 'extent', 'maxbins', 'minstep', 'nice', 'step', 'steps':
-                    if opt in ek: 
-                        binop[opt] = ek[opt] 
+                    if opt in ek:
+                        binop[opt] = ek[opt]
 
                 # redirect newencoding to columns after transform.
                 # make a copy so that if transform failed we do not mess up
@@ -83,7 +84,7 @@ class Transformer:
                 else:
                     newencoding[k]['title'] = ek['field'] + ' (binned)'
                 if k == 'x' or k == 'y':
-                    newencoding[k + '2'] = {'field': binned2} 
+                    newencoding[k + '2'] = {'field': binned2}
                 # add groupby
                 aggops['groupby'].append(binned)
                 aggops['groupby'].append(binned2)
@@ -91,17 +92,19 @@ class Transformer:
             # transform aggregate as well
             if 'aggregate' in ek:
                 aggop = {}
-                for opt in ['aggregate', 'field', 'as', 'groupby']: 
+                for opt in ['aggregate', 'field', 'as', 'groupby']:
                     if opt in ek:
                         aggop[opt] = ek[opt]
-                aggops['aggregate'].append(aggop) 
+                aggops['aggregate'].append(aggop)
 
                 # redirect agg to columns after transform.
                 newencoding[k] = ek.copy()
                 del newencoding[k]['aggregate']
                 if 'field' in ek:
-                    newencoding[k]['field'] = '__' + ek['aggregate'] + '_' + ek['field']
-                    newencoding[k]['title'] = ek['aggregate'] + ' of ' + ek['field']
+                    newencoding[k]['field'] = '__' + \
+                        ek['aggregate'] + '_' + ek['field']
+                    newencoding[k]['title'] = ek['aggregate'] + \
+                        ' of ' + ek['field']
                 else:
                     newencoding[k]['field'] = '__' + ek['aggregate']
                     newencoding[k]['title'] = ek['aggregate'] + ' of Records'
@@ -111,7 +114,8 @@ class Transformer:
         else:
             newchart, newdata, ok = self.do_one_transform(chart, data, binop)
             if ok and len(aggops['aggregate']) > 0:
-                newchart, newdata, ok = self.do_one_transform(newchart, newdata, aggops) 
+                newchart, newdata, ok = self.do_one_transform(
+                    newchart, newdata, aggops)
 
             if ok:
                 newchart['encoding'] = newencoding
@@ -126,11 +130,11 @@ class Transformer:
             return chart, data, None
 
         # A list of known tranformas
-        trs = {'bin': 0, 
-               'aggregate': 0, 
+        trs = {'bin': 0,
+               'aggregate': 0,
                'other': 0
-            }
-        
+               }
+
         for k in chart['encoding']:
             if 'bin' in chart['encoding'][k]:
                 trs['bin'] += 1
@@ -138,16 +142,18 @@ class Transformer:
                 trs['aggregate'] += 1
             else:
                 trs['other'] += 1
-            
+
         newtr, newencoding = None, None
         if trs['bin'] == 1:
-            # Handle first case, bin.   We can bin only if all or none is aggregate. 
+            # Handle first case, bin.   We can bin only if all or none is aggregate.
             if trs['aggregate'] == 0 or trs['other'] == 0:
-                newchart, newdata = self.transform_bin_encoding(chart, data, chart['encoding'])
+                newchart, newdata = self.transform_bin_encoding(
+                    chart, data, chart['encoding'])
                 return newchart, newdata
         elif trs['bin'] == 0 and trs['aggregate'] > 0:
             # Handle aggregate
-            newchart, newdata = self.transform_aggregate_encoding(chart, data, chart['encoding'])
+            newchart, newdata = self.transform_aggregate_encoding(
+                chart, data, chart['encoding'])
             return newchart, newdata
 
         # did not extract any transform
@@ -163,7 +169,8 @@ class Transformer:
             transforms = chart['transform']
             remaining = []
             for i in range(len(transforms)):
-                chart, data, ok = self.do_one_transform(chart, data, transforms[i])
+                chart, data, ok = self.do_one_transform(
+                    chart, data, transforms[i])
                 if not ok:
                     remaining = transforms[i:]
                     break
@@ -204,15 +211,31 @@ class Transformer:
         xt = self.conn.getxt(x)
         return xt
 
+    def restore_propertry(self, tr, name, val):
+        if val is not None:
+            tr[name] = val
+        elif name in tr:
+            del tr[name]
 
     # following altir_transform tranform_chart
-    def transform(self, chart, topLevel=True): 
+    def transform(self, chart):
         # test if chart.config is undefined
         tr = chart.to_dict()
+
+        # keep the following top level attributes
+        bg = tr.get('background', None)
+        padding = tr.get('padding', None)
+        autosize = tr.get('autosize', None)
+        config = tr.get('config', None)
+        schema = tr.get('$schema', None)
+
         tr = self.do_transform(tr)
         tr = self.mo_exec(tr)
-        if not topLevel:
-            for topKey in ['background', 'padding', 'autosize', 'config', '$schema']:
-                if topKey in tr:
-                    del tr[topKey]
+
+        self.restore_propertry(tr, 'background', bg)
+        self.restore_propertry(tr, 'padding', padding)
+        self.restore_propertry(tr, 'autosize', autosize)
+        self.restore_propertry(tr, 'config', config)
+        self.restore_propertry(tr, '$schema', schema)
+
         return alt.Chart.from_dict(tr)

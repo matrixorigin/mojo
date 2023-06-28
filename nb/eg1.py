@@ -26,7 +26,5 @@ line = alt.Chart(df).transform_window(
 # print(line.to_json())
 
 chart = points + line
-chart
-
-# chart.save("chart.png")
+chart.save("chart.html")
 
