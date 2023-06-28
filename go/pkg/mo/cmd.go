@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/abiosoft/ishell/v2"
+	"github.com/matrixorigin/mojo/pkg/common"
 )
 
 func MoConnect(c *ishell.Context) {
@@ -14,7 +15,7 @@ func MoConnect(c *ishell.Context) {
 }
 
 func MoCmd(c *ishell.Context) {
-	res, err := QToken(c.Args)
+	res, err := QToken(c.RawArgs[1:])
 	if err != nil {
 		c.Println("Error:", err)
 	} else {
@@ -25,7 +26,7 @@ func MoCmd(c *ishell.Context) {
 func MoSave(c *ishell.Context) {
 	fs := flag.NewFlagSet("mo.save", flag.ContinueOnError)
 	var ofn string
-	fs.StringVar(&ofn, "o", "/tmp/mojo.data", "save to output file")
+	fs.StringVar(&ofn, "o", common.GetVar("TMP")+"/mojo.data", "save to output file")
 
 	if err := fs.Parse(c.Args); err != nil {
 		c.Println()
@@ -43,7 +44,7 @@ func MoSave(c *ishell.Context) {
 }
 
 func MoSelect(c *ishell.Context) {
-	tks := append([]string{"select"}, c.Args...)
+	tks := append([]string{"select"}, c.RawArgs[1:]...)
 	res, err := QToken(tks)
 	if err != nil {
 		c.Println("Error:", err)
@@ -53,7 +54,7 @@ func MoSelect(c *ishell.Context) {
 }
 
 func MoWith(c *ishell.Context) {
-	tks := append([]string{"with"}, c.Args...)
+	tks := append([]string{"with"}, c.RawArgs[1:]...)
 	res, err := QToken(tks)
 	if err != nil {
 		c.Println("Error:", err)
@@ -63,7 +64,7 @@ func MoWith(c *ishell.Context) {
 }
 
 func MoInsert(c *ishell.Context) {
-	tks := append([]string{"insert"}, c.Args...)
+	tks := append([]string{"insert"}, c.RawArgs[1:]...)
 	res, err := QToken(tks)
 	if err != nil {
 		c.Println("Error:", err)
@@ -73,7 +74,7 @@ func MoInsert(c *ishell.Context) {
 }
 
 func MoDelete(c *ishell.Context) {
-	tks := append([]string{"delete"}, c.Args...)
+	tks := append([]string{"delete"}, c.RawArgs[1:]...)
 	res, err := QToken(tks)
 	if err != nil {
 		c.Println("Error:", err)
@@ -83,7 +84,7 @@ func MoDelete(c *ishell.Context) {
 }
 
 func MoUpdate(c *ishell.Context) {
-	tks := append([]string{"update"}, c.Args...)
+	tks := append([]string{"update"}, c.RawArgs[1:]...)
 	res, err := QToken(tks)
 	if err != nil {
 		c.Println("Error:", err)

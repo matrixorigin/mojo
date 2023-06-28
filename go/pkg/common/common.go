@@ -46,6 +46,7 @@ func ParseFlags() {
 	moVar["MOUSER"] = supplyDefault(moUser, "MOJO_MOUSER", "dump")
 	moVar["MOPASSWD"] = supplyDefault(moPasswd, "MOJO_MOPASSWD", "111")
 	moVar["MODB"] = supplyDefault(moDb, "MOJO_MODB", "system")
+	moVar["TMP"] = supplyDefault("", "MOJO_TMP", "/tmp")
 }
 
 // command: set XXX value

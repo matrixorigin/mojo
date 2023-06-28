@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/abiosoft/ishell/v2"
-	"github.com/matrixorigin/mojo/pkg/common"
+	"github.com/matrixorigin/mojo/pkg/mo"
 )
 
 func Echo(c *ishell.Context) {
@@ -13,7 +13,7 @@ func Echo(c *ishell.Context) {
 }
 
 func Gnuplot(c *ishell.Context) {
-	common.RunGnuplot(c, []string{"plot sin(x)"})
+	mo.RunGnuplot(c, []string{"plot sin(x)"})
 }
 
 func BuildCmd(sh *ishell.Shell) {
