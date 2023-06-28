@@ -4,9 +4,14 @@ mojo is the magic mo debugging tool
 ## bt: bpftrace
 The bt dir contains a bunch of bpftrace scripts.
 
-## mojo
-This is a go command line for debugging matrixone, esp, error log
-ananlysis.
+## py and nb: python and notebook scripts
+The py and nb directory contains a few python scripts for toy
+with data and plotting.
+
+## go: mojo
+Golang tools and programs.   Especially it build a command line
+program `mojo`.  mojo is a swiss army knife for playing with and 
+debugging matrixone, esp, error log ananlysis.
 
 Some analysis may output graph/pictures.  mojo use sixel to display
 graphics in terminal.  You need to install gnuplot 5.4 on local the

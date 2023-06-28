@@ -8,7 +8,7 @@ import (
 )
 
 func Echo(c *ishell.Context) {
-	line := strings.Join(c.Args, " ")
+	line := strings.Join(c.RawArgs, " ~ ")
 	c.Println("echo:", line)
 }
 
@@ -18,7 +18,7 @@ func Gnuplot(c *ishell.Context) {
 
 func BuildCmd(sh *ishell.Shell) {
 	testCmd := &ishell.Cmd{
-		Name: "test",
+		Name: "!test",
 		Help: "dev/test only",
 	}
 	testCmd.AddCmd(&ishell.Cmd{

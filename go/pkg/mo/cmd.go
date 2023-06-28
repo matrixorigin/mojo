@@ -98,47 +98,47 @@ func MoUpdate(c *ishell.Context) {
 // lower case.
 func BuildCmd(sh *ishell.Shell) {
 	sh.AddCmd(&ishell.Cmd{
-		Name: "connect",
+		Name: "!connect",
 		Help: "connect to database",
 		Func: MoConnect,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "mo",
+		Name: "!mo",
 		Help: "genric mo command/sql",
 		Func: MoCmd,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "select",
+		Name: "!select",
 		Help: "select query",
 		Func: MoSelect,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "with",
+		Name: "!with",
 		Help: "with select query",
 		Func: MoWith,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "insert",
+		Name: "!insert",
 		Help: "insert query",
 		Func: MoInsert,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "update",
+		Name: "!update",
 		Help: "update query",
 		Func: MoUpdate,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "delete",
+		Name: "!delete",
 		Help: "delete query",
 		Func: MoDelete,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "save",
+		Name: "!save",
 		Help: "save query result",
 		Func: MoSave,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "plot",
+		Name: "!plot",
 		Help: "plot saved query result",
 		Func: XyPlot,
 	})

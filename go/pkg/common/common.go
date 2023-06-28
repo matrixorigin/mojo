@@ -31,7 +31,7 @@ func ParseFlags() {
 	flag.StringVar(&moPort, "p", "", "mo port, default to $MOJO_MOPORT or 6001 if not set")
 	flag.StringVar(&moUser, "u", "", "mo user, default to $MOJO_MOUSER or dump if not set")
 	flag.StringVar(&moPasswd, "passwd", "", "mo password, default to $MOJO_MOPASSWD or 111 if not set")
-	flag.StringVar(&moDb, "d", "", "mo database, default to $MOJO_MODB or mysql if not set")
+	flag.StringVar(&moDb, "d", "", "mo database, default to $MOJO_MODB or system if not set")
 
 	// parse os.Args[1:]
 	flag.Parse()
@@ -45,8 +45,7 @@ func ParseFlags() {
 	moVar["MOPORT"] = supplyDefault(moPort, "MOJO_MOPORT", "6001")
 	moVar["MOUSER"] = supplyDefault(moUser, "MOJO_MOUSER", "dump")
 	moVar["MOPASSWD"] = supplyDefault(moPasswd, "MOJO_MOPASSWD", "111")
-	moVar["MODB"] = supplyDefault(moDb, "MOJO_MODB", "mysql")
-
+	moVar["MODB"] = supplyDefault(moDb, "MOJO_MODB", "system")
 }
 
 // command: set XXX value
@@ -90,12 +89,12 @@ func ShowCmd(c *ishell.Context) {
 
 func BuildCmd(sh *ishell.Shell) {
 	sh.AddCmd(&ishell.Cmd{
-		Name: "set",
+		Name: "!set",
 		Help: "set variable",
 		Func: SetCmd,
 	})
 	sh.AddCmd(&ishell.Cmd{
-		Name: "show",
+		Name: "!show",
 		Help: "show variable value",
 		Func: ShowCmd,
 	})

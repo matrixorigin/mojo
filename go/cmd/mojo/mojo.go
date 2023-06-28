@@ -4,7 +4,6 @@ import (
 	"github.com/abiosoft/ishell/v2"
 
 	"github.com/matrixorigin/mojo/pkg/common"
-	"github.com/matrixorigin/mojo/pkg/errlog"
 	"github.com/matrixorigin/mojo/pkg/mo"
 	"github.com/matrixorigin/mojo/pkg/test"
 )
@@ -25,7 +24,6 @@ func main() {
 	common.BuildCmd(shell)
 	test.BuildCmd(shell)
 	mo.BuildCmd(shell)
-	errlog.BuildCmd(shell)
 
 	shell.Run()
 }

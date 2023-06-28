@@ -24,25 +24,7 @@ func Open() error {
 		common.GetVar("MOHOST"), common.GetVar("MOPORT"),
 		common.GetVar("MODB"))
 	db, err = sql.Open("mysql", connstr)
-	if err != nil {
-		return err
-	}
-
-	// go sql weird stuff
-	// db.SetConnMaxIdleTime(0)
-	// db.SetConnMaxLifetime(0)
-	// db.SetMaxOpenConns(1)
-	// db.SetMaxIdleConns(0)
-
-	// immediately set some of the most freq used vars
-	qd, err := QueryVal("select current_date")
-	if err != nil {
-		return err
-	}
-	common.SetVar("MOJO_LOGDATE", qd)
-	qd = strings.ReplaceAll(qd, "-", "/")
-	common.SetVar("MOJO_MOPATH", fmt.Sprintf(" __mo_filepath like '%%/%s/%%' ", qd))
-	return nil
+	return err
 }
 
 func Exec(sql string, params ...any) error {
