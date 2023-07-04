@@ -22,3 +22,7 @@ func TestChat(t *testing.T) {
 	}
 	t.Log(completion)
 }
+
+func TestAltair(t *testing.T) {
+
+}

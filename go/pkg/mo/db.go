@@ -11,29 +11,73 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-var db *sql.DB
+type MoDB struct {
+	db *sql.DB
+}
+
+var dfltDB *MoDB
+
+func (db *MoDB) Close() error {
+	if db.db != nil {
+		err := db.db.Close()
+		db.db = nil
+		return err
+	}
+	return nil
+}
 
 func Open() error {
 	var err error
-	if db != nil {
-		db.Close()
+	if dfltDB != nil {
+		dfltDB.Close()
 	}
+	dfltDB, err = OpenDB(common.GetVar("MODB"))
+	return err
+}
 
+func DefaultDB() *MoDB {
+	return dfltDB
+}
+
+func OpenDB(dbname string) (*MoDB, error) {
+	var modb MoDB
 	connstr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
 		common.GetVar("MOUSER"), common.GetVar("MOPASSWD"),
 		common.GetVar("MOHOST"), common.GetVar("MOPORT"),
+		dbname)
+
+	db, err := sql.Open("mysql", connstr)
+	if err != nil {
+		return nil, err
+	}
+	// We do not want connection pooling.  Go impl is a mess.
+	db.SetMaxOpenConns(1)
+	modb.db = db
+	return &modb, nil
+}
+
+func PyConnStr() string {
+	return fmt.Sprintf("mysql+pymysql://%s:%s@%s:%s/%s",
+		common.GetVar("MOUSER"), common.GetVar("MOPASSWD"),
+		common.GetVar("MOHOST"), common.GetVar("MOPORT"),
 		common.GetVar("MODB"))
-	db, err = sql.Open("mysql", connstr)
+}
+
+func (db *MoDB) Exec(sql string, params ...any) error {
+	_, err := db.db.Exec(sql, params...)
 	return err
 }
 
-func Exec(sql string, params ...any) error {
-	_, err := db.Exec(sql, params...)
-	return err
+func (db *MoDB) Prepare(sql string) (*sql.Stmt, error) {
+	return db.db.Prepare(sql)
 }
 
-func QueryVal(sql string, params ...any) (string, error) {
-	rows, err := db.Query(sql, params...)
+func (db *MoDB) Begin() (*sql.Tx, error) {
+	return db.db.Begin()
+}
+
+func (db *MoDB) QueryVal(sql string, params ...any) (string, error) {
+	rows, err := db.db.Query(sql, params...)
 	if err != nil {
 		return "", err
 	}
@@ -47,8 +91,8 @@ func QueryVal(sql string, params ...any) (string, error) {
 	return ret, nil
 }
 
-func Query(sql string, params ...any) (string, error) {
-	rows, err := db.Query(sql, params...)
+func (db *MoDB) Query(sql string, params ...any) (string, error) {
+	rows, err := db.db.Query(sql, params...)
 	if err != nil {
 		return "", err
 	}
@@ -112,12 +156,16 @@ func token2q(tokens []string) (string, []any) {
 
 func QToken(tokens []string) (string, error) {
 	qry, params := token2q(tokens)
-	return Query(qry, params...)
+	return dfltDB.Query(qry, params...)
 }
 
 func QSave(tokens []string, f *os.File) error {
 	sql, params := token2q(tokens)
-	rows, err := db.Query(sql, params...)
+	return qSave(dfltDB, sql, params, f)
+}
+
+func qSave(db *MoDB, sql string, params []any, f *os.File) error {
+	rows, err := db.db.Query(sql, params...)
 	if err != nil {
 		return err
 	}

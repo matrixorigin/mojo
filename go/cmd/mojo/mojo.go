@@ -6,6 +6,7 @@ import (
 	"github.com/matrixorigin/mojo/pkg/common"
 	"github.com/matrixorigin/mojo/pkg/gpt"
 	"github.com/matrixorigin/mojo/pkg/mo"
+	"github.com/matrixorigin/mojo/pkg/repro"
 	"github.com/matrixorigin/mojo/pkg/test"
 )
 
@@ -26,6 +27,7 @@ func main() {
 	test.BuildCmd(shell)
 	mo.BuildCmd(shell)
 	gpt.BuildCmd(shell)
+	repro.BuildCmd(shell)
 
 	shell.Run()
 }

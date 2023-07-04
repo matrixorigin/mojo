@@ -16,7 +16,7 @@ def test_bar_highlight(motr_init):
         x="year:O",
         y="wheat:Q",
     )
-    bars = motr.transform_chart(bars, topLevel=False)
+    bars = motr.transform_chart(bars)
     print(bars.to_json())
 
     highlight = alt.Chart(source.url()).mark_bar(color="#e45755").encode(
@@ -26,7 +26,7 @@ def test_bar_highlight(motr_init):
     ).transform_filter(
         alt.datum.wheat > 90
     ).transform_calculate("baseline", "90")
-    highlight = motr.transform_chart(highlight, topLevel=False)
+    highlight = motr.transform_chart(highlight)
     print(highlight.to_json())
 
     rule = alt.Chart(threshold).mark_rule().encode(
