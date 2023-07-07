@@ -50,8 +50,6 @@ func OpenDB(dbname string) (*MoDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// We do not want connection pooling.  Go impl is a mess.
-	db.SetMaxOpenConns(1)
 	modb.db = db
 	return &modb, nil
 }
@@ -66,6 +64,13 @@ func PyConnStr() string {
 func (db *MoDB) Exec(sql string, params ...any) error {
 	_, err := db.db.Exec(sql, params...)
 	return err
+}
+
+func (db *MoDB) MustExec(sql string, params ...any) {
+	err := db.Exec(sql, params...)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (db *MoDB) Prepare(sql string) (*sql.Stmt, error) {
