@@ -15,8 +15,8 @@ func MoC956(sh *ishell.Context) {
 	var batchMode string
 	var txnMode string
 	var singleTbl bool
-	fs.StringVar(&batchMode, "b", "batch", "batch, single, prepare")
-	fs.StringVar(&txnMode, "t", "auto", "begin, badbegin")
+	fs.StringVar(&batchMode, "b", "prepare", "batch, single, prepare")
+	fs.StringVar(&txnMode, "t", "begin", "auto, begin, badbegin")
 	fs.BoolVar(&singleTbl, "s", false, "single table")
 
 	if err := fs.Parse(sh.Args); err != nil {
@@ -33,7 +33,7 @@ func MoC956(sh *ishell.Context) {
 		panic(err)
 	}
 
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 10; i++ {
 		sh.Println("drop table table:", i)
 		dropTbl := fmt.Sprintf("drop table if exists tbl_%d", i)
 		if err := db.Exec(dropTbl); err != nil {
