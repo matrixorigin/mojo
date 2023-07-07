@@ -9,7 +9,7 @@ import (
 	"github.com/matrixorigin/mojo/pkg/mo"
 )
 
-func Worker(sh *ishell.Context, db *mo.MoDB, id, loop int, wg *sync.WaitGroup) {
+func Worker(sh *ishell.Context, db *mo.MoDB, id, loop int, s4upd bool, wg *sync.WaitGroup) {
 	sh.Println("worker", id, "started")
 	defer wg.Done()
 	for i := 0; i < loop; i++ {
@@ -17,8 +17,13 @@ func Worker(sh *ishell.Context, db *mo.MoDB, id, loop int, wg *sync.WaitGroup) {
 		if err != nil {
 			sh.Println("worker", id, "loop", i, "begin failed", err)
 		}
-		rows, err := tx.Query(fmt.Sprintf("select j from mo8871_a where i = %d for update", i%5))
-		// rows, err := tx.Query(fmt.Sprintf("select j from mo8871_a where i = %d", i%5))
+
+		qstr := fmt.Sprintf("select j from mo8871_a where i = %d", i%5)
+		if s4upd {
+			qstr += " for update"
+		}
+
+		rows, err := tx.Query(qstr)
 		if err != nil {
 			sh.Println("worker", id, "loop", i, "select for update", err)
 		}
@@ -29,6 +34,8 @@ func Worker(sh *ishell.Context, db *mo.MoDB, id, loop int, wg *sync.WaitGroup) {
 		rows.Scan(&oldj)
 		newj := oldj + 1
 		rows.Close()
+
+		sh.Println("worker", id, "loop", i, "oldj", oldj, "newj", newj)
 
 		_, err = tx.Exec(fmt.Sprintf("update mo8871_a set j = %d where i = %d", newj, i%5))
 		if err != nil {
@@ -50,8 +57,10 @@ func Mo8871(sh *ishell.Context) {
 	fs := flag.NewFlagSet("mo-8871", flag.ContinueOnError)
 	var nth int
 	var loop int
-	fs.IntVar(&nth, "n", 2, "number of threads")
+	var s4upd bool
+	fs.IntVar(&nth, "n", 1, "number of threads")
 	fs.IntVar(&loop, "loop", 10, "exec loop count")
+	fs.BoolVar(&s4upd, "u", true, "if use select for update")
 
 	if err := fs.Parse(sh.Args); err != nil {
 		sh.Println()
@@ -82,7 +91,7 @@ func Mo8871(sh *ishell.Context) {
 	wg.Add(nth)
 	for i := 0; i < nth; i++ {
 		sh.Println("start worker", i, "loop", loop)
-		go Worker(sh, db, i, loop, &wg)
+		go Worker(sh, db, i, loop, s4upd, &wg)
 	}
 	wg.Wait()
 
