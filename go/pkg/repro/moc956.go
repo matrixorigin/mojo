@@ -41,7 +41,7 @@ func MoC956(sh *ishell.Context) {
 		}
 	}
 
-	tot := 200
+	tot := 10
 	if singleTbl {
 		tot = 1
 	}
@@ -135,5 +135,9 @@ func MoC956(sh *ishell.Context) {
 
 		duration := time.Since(start)
 		sh.Printf("Iter %d: Time %v\n", i, duration)
+
+		// check
+		cnt, err := db.Query(fmt.Sprintf("select count(*) from tbl_%d", i))
+		sh.Println("check table:", i, "count", cnt, err)
 	}
 }

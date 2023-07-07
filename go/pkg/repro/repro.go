@@ -26,5 +26,11 @@ func BuildCmd(sh *ishell.Shell) {
 		Help: "playing with autoincr to repor slowdown",
 		Func: MoC956,
 	})
+	testCmd.AddCmd(&ishell.Cmd{
+		Name: "mo-8871",
+		Help: "mo-8871",
+		Func: Mo8871,
+	})
+
 	sh.AddCmd(testCmd)
 }
