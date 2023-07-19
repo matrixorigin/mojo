@@ -31,7 +31,7 @@ func Open() error {
 	if dfltDB != nil {
 		dfltDB.Close()
 	}
-	dfltDB, err = OpenDB(common.GetVar("MODB"))
+	dfltDB, err = OpenDB(common.GetVar("MOPORT"), common.GetVar("MODB"))
 	return err
 }
 
@@ -39,12 +39,12 @@ func DefaultDB() *MoDB {
 	return dfltDB
 }
 
-func OpenDB(dbname string) (*MoDB, error) {
+func OpenDB(port string, dbname string) (*MoDB, error) {
 	var modb MoDB
 	connstr := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
 		common.GetVar("MOUSER"), common.GetVar("MOPASSWD"),
-		common.GetVar("MOHOST"), common.GetVar("MOPORT"),
-		dbname)
+		common.GetVar("MOHOST"),
+		port, dbname)
 
 	db, err := sql.Open("mysql", connstr)
 	if err != nil {

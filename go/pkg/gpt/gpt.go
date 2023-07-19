@@ -13,7 +13,10 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-func echoGpt(c *ishell.Context) {
+var gptMsgs []openai.ChatCompletionMessage
+var gptClient *GptClient
+
+func testGpt(c *ishell.Context) {
 	// existing line
 	lines := strings.Join(c.RawArgs[1:], " ")
 	if len(lines) == 0 || lines[len(lines)-1] != ';' {
@@ -24,27 +27,45 @@ func echoGpt(c *ishell.Context) {
 		}
 	}
 
-	c.Println("Done reading. You wrote:")
-	c.Println(lines)
+	if gptClient == nil {
+		gptClient = NewGptClient("gpt-3.5-turbo")
+		gptMsgs = append(gptMsgs, openai.ChatCompletionMessage{Role: "system", Content: "You are a helpful assistant."})
+	}
+
+	gptMsgs = append(gptMsgs, openai.ChatCompletionMessage{Role: "user", Content: lines})
+	completion, err := gptClient.Chat(gptMsgs)
+	if err != nil {
+		panic(err)
+	}
+	c.Println(completion.Content)
+	gptMsgs = append(gptMsgs, completion)
+}
+
+func clearGpt(c *ishell.Context) {
+	gptClient = nil
+	gptMsgs = nil
+	c.Println("Gpt chat history cleared")
 }
 
 func BuildCmd(sh *ishell.Shell) {
 	chatCmd := &ishell.Cmd{
 		Name: ".",
 		Help: ". starts a multi line chat with gpt, end input with a ;",
-		Func: echoGpt,
+		Func: testGpt,
 	}
 	sh.AddCmd(chatCmd)
+
+	clearCmd := &ishell.Cmd{
+		Name: ".clearGpt",
+		Help: ".clearGpt clears the gpt chat history",
+		Func: clearGpt,
+	}
+	sh.AddCmd(clearCmd)
 
 	testCmd := &ishell.Cmd{
 		Name: ".test",
 		Help: "chat tester",
 	}
-	testCmd.AddCmd(&ishell.Cmd{
-		Name: "echo",
-		Help: "Send chat message to gpt and echo output",
-		Func: echoGpt,
-	})
 	testCmd.AddCmd(&ishell.Cmd{
 		Name: "plot",
 		Help: "Plot a sin curve using altair",
@@ -59,19 +80,20 @@ type GptClient struct {
 	model  string
 }
 
-func NewGptClient(model string) GptClient {
+func NewGptClient(model string) *GptClient {
 	var client GptClient
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	client.client = openai.NewClient(apiKey)
 	client.model = model
-	return client
+	return &client
 }
 
 func (cli *GptClient) Chat(msgs []openai.ChatCompletionMessage) (openai.ChatCompletionMessage, error) {
 	ctx := context.Background()
 	completion, err := cli.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model:    cli.model,
-		Messages: msgs,
+		Model:       cli.model,
+		Temperature: 0.25,
+		Messages:    msgs,
 	})
 
 	if err != nil {

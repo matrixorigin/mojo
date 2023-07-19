@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/abiosoft/ishell/v2"
@@ -15,20 +16,36 @@ func MoC956(sh *ishell.Context) {
 	var batchMode string
 	var txnMode string
 	var singleTbl bool
+	var dumpFn string
 	fs.StringVar(&batchMode, "b", "prepare", "batch, single, prepare")
 	fs.StringVar(&txnMode, "t", "begin", "auto, begin, badbegin")
 	fs.BoolVar(&singleTbl, "s", false, "single table")
+	fs.StringVar(&dumpFn, "d", "", "dump sql commands")
 
-	if err := fs.Parse(sh.Args); err != nil {
+	var err error
+
+	if err = fs.Parse(sh.Args); err != nil {
 		sh.Println()
 		return
 	}
 	sh.Printf("MoC-956: autoincr repro, batchmode:%s, txnmode:%v\n", batchMode, txnMode)
 
+	var dumpF *os.File
+	if dumpFn != "" {
+		// open dumpFile to write
+		dumpF, err = os.Create(dumpFn)
+		if err != nil {
+			panic(err)
+		}
+		defer dumpF.Close()
+
+		dumpF.WriteString("use repro;\n")
+	}
+
 	modb := mo.DefaultDB()
 	modb.Exec("create database if not exists repro")
 
-	db, err := mo.OpenDB("repro")
+	db, err := mo.OpenDB("6001", "repro")
 	if err != nil {
 		panic(err)
 	}
@@ -51,6 +68,9 @@ func MoC956(sh *ishell.Context) {
 
 		start := time.Now()
 		crTbl := fmt.Sprintf("create table tbl_%d(i int, j int, k int)", i)
+		if dumpF != nil {
+			dumpF.WriteString(crTbl + ";\n")
+		}
 		err = db.Exec(crTbl)
 		if err != nil {
 			panic(err)
@@ -59,6 +79,9 @@ func MoC956(sh *ishell.Context) {
 		sh.Println("insert into table:", i)
 		if batchMode == "batch" {
 			ins := fmt.Sprintf("insert into tbl_%d select result, result +1, result+2 from generate_series(1, 10000) tmpt", i)
+			if dumpF != nil {
+				dumpF.WriteString(ins + "\n")
+			}
 			err = db.Exec(ins)
 			if err != nil {
 				panic(err)
@@ -77,6 +100,9 @@ func MoC956(sh *ishell.Context) {
 
 			for j := 0; j < 1000; j++ {
 				ins := fmt.Sprintf("insert into tbl_%d values(%d, %d, %d)", i, j, j+1, j+2)
+				if dumpF != nil {
+					dumpF.WriteString(ins + ";\n")
+				}
 				if tx == nil {
 					err = db.Exec(ins)
 				} else {
