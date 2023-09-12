@@ -7,7 +7,7 @@ import (
 )
 
 func TestChat(t *testing.T) {
-	client := NewGptClient("gpt-3.5-turbo")
+	client := NewGptClient("gpt-4")
 
 	msgs := []openai.ChatCompletionMessage{
 		{
