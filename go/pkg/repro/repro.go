@@ -31,6 +31,11 @@ func BuildCmd(sh *ishell.Shell) {
 		Help: "mo-8871",
 		Func: Mo8871,
 	})
+	testCmd.AddCmd(&ishell.Cmd{
+		Name: "panic",
+		Help: "panicleak",
+		Func: PanicLeak,
+	})
 
 	sh.AddCmd(testCmd)
 }
