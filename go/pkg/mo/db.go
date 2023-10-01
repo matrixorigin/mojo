@@ -96,6 +96,21 @@ func (db *MoDB) QueryVal(sql string, params ...any) (string, error) {
 	return ret, nil
 }
 
+func (db *MoDB) QueryIVal(sql string, params ...any) (int64, error) {
+	rows, err := db.db.Query(sql, params...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, nil
+	}
+	var ret int64
+	rows.Scan(&ret)
+	return ret, nil
+}
+
 func (db *MoDB) Query(sql string, params ...any) (string, error) {
 	rows, err := db.db.Query(sql, params...)
 	if err != nil {

@@ -1,6 +1,7 @@
 package repro
 
 import (
+	"database/sql"
 	"strings"
 
 	"github.com/abiosoft/ishell/v2"
@@ -32,10 +33,50 @@ func BuildCmd(sh *ishell.Shell) {
 		Func: Mo8871,
 	})
 	testCmd.AddCmd(&ishell.Cmd{
+		Name: "mo-11957",
+		Help: "mo-11957",
+		Func: Mo11957,
+	})
+
+	testCmd.AddCmd(&ishell.Cmd{
 		Name: "panic",
 		Help: "panicleak",
 		Func: PanicLeak,
 	})
 
 	sh.AddCmd(testCmd)
+}
+
+func dbExec(db *mo.MoDB, sql string) {
+	if err := db.Exec(sql); err != nil {
+		panic(err)
+	}
+}
+
+func txExec(tx *sql.Tx, sql string) {
+	if _, err := tx.Exec(sql); err != nil {
+		panic(err)
+	}
+}
+
+func shtxExec(sh *ishell.Context, tx *sql.Tx, sql string) {
+	rs, err := tx.Exec(sql)
+	if sh != nil {
+		sh.Println("exec and print rs: ", rs, "err: ", err)
+	}
+}
+
+func txQueryIVal(tx *sql.Tx, sql string, params ...any) (int64, error) {
+	rows, err := tx.Query(sql, params...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, nil
+	}
+	var ret int64
+	rows.Scan(&ret)
+	return ret, nil
 }
