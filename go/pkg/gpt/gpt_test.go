@@ -12,7 +12,7 @@ func TestChat(t *testing.T) {
 	msgs := []openai.ChatCompletionMessage{
 		{
 			Role:    "user",
-			Content: "Hello!",
+			Content: "I have a table of nation and its GDP from year 2000 to 2020.    I want to plot the data using gnuplot.   What is the chart type I should use?",
 		},
 	}
 

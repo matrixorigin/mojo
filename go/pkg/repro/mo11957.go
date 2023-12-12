@@ -9,7 +9,7 @@ import (
 	"github.com/matrixorigin/mojo/pkg/mo"
 )
 
-func Mo11957(sh *ishell.Context) {
+func Mo11917(sh *ishell.Context) {
 	fs := flag.NewFlagSet("mo11957", flag.ContinueOnError)
 	var thCnt int
 	var loopCnt int
@@ -33,11 +33,6 @@ func Mo11957(sh *ishell.Context) {
 		panic(err)
 	}
 
-	dbExec(db, "drop table if exists mo11957_10000")
-	dbExec(db, "create table mo11957_10000(i int not null primary key auto_increment, j int, k int, t text)")
-	dbExec(db, "insert into mo11957_10000 values(null, 1, 2, 'foo')")
-	dbExec(db, "insert into mo11957_10000 values(null, 1, 2, 'bar')")
-
 	var wg sync.WaitGroup
 	wg.Add(thCnt)
 
@@ -45,29 +40,18 @@ func Mo11957(sh *ishell.Context) {
 		go func(ii int, wg *sync.WaitGroup) {
 			defer wg.Done()
 			sh.Println("start worker", ii, "loop", loopCnt)
-
-			dbExec(db, fmt.Sprintf("drop table if exists mo11957_%d", ii))
-			dbExec(db, fmt.Sprintf("create table mo11957_%d(i int not null primary key auto_increment, j int, k int, t text)", ii))
-			dbExec(db, fmt.Sprintf("insert into mo11957_%d values(null, 1, 2, 'foo')", ii))
-			dbExec(db, fmt.Sprintf("insert into mo11957_%d values(null, 1, 2, 'bar')", ii))
-
 			tx, err := db.Begin()
 			if err != nil {
 				panic(err)
 			}
 
-			tbn := 10000
-			if !shareT {
-				tbn = ii
-			}
-
 			for j := 0; j < loopCnt; j++ {
 				sh.Println("... worker", ii, "loop", j)
-				txExec(tx, "begin")
-				txExec(tx, fmt.Sprintf("insert into mo11957_%d(j, k, t) values(%d, %d, 'foobarzoo')", tbn, ii, j))
-				txExec(tx, fmt.Sprintf("insert into mo11957_%d(j, k, t) values(%d, %d, 'foobarzoo')", tbn, ii, j))
-				txExec(tx, fmt.Sprintf("update mo11957_%d set t = 'foobarzoo updated' where j = %d and k = %d", tbn, ii, j-1))
-				txExec(tx, "commit")
+				tbn := fmt.Sprintf("xxx_%d_%d", ii, j%5)
+				txExec(tx, fmt.Sprintf("drop table if exists %s", tbn))
+				txExec(tx, fmt.Sprintf("create table if not exists %s(i int, j int, k int)", tbn))
+				txExec(tx, fmt.Sprintf("insert into %s values (1, 2, 3)", tbn))
+				txExec(tx, fmt.Sprintf("select * from %s", tbn))
 			}
 		}(i, &wg)
 	}
