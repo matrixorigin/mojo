@@ -101,16 +101,21 @@ func PanicLeak(sh *ishell.Context) {
 				pki := r.Intn(2)
 				// pkj := r.Intn(10)
 
-				_, err := txQueryIVal(tx, "select k from panicleak where i = 0 and j = ? for update", pki)
-				if err != nil {
-					panic(err)
-				}
+				// _, err := txQueryIVal(tx, "select k from panicleak where i = 0 and j = ? for update", pki)
+				// if err != nil {
+				// 	panic(err)
+				// }
 
-				sleepMs := time.Duration(r.Intn(1000))
-				time.Sleep(sleepMs * time.Microsecond)
-
+				// sleepMs := time.Duration(r.Intn(1000))
+				// time.Sleep(sleepMs * time.Microsecond)
 				txExec(tx, fmt.Sprintf("update panicleak set k = k + 1 where i = 0 and j = %d", pki))
+
+				sleepMs := time.Duration(r.Intn(100))
+				time.Sleep(sleepMs * time.Millisecond)
+				txExec(tx, fmt.Sprintf("update panicleak set k = k + 1 where i = 0 and j = %d", pki))
+
 				txExec(tx, "commit")
+
 			}
 		}(i, &wg)
 	}
