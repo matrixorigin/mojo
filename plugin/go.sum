@@ -1,2 +1,6 @@
+github.com/eliben/go-sudoku v0.0.0-20240410134957-a27844886aa9 h1:xaMzNcUVx015OIBRfcnRFTHnIGIElswoDZj9m31q4UM=
+github.com/eliben/go-sudoku v0.0.0-20240410134957-a27844886aa9/go.mod h1:yTMJtYP8fpTUBEYklCGPE+T2KZHhhzrwWqSuZjCZT6k=
 github.com/extism/go-pdk v1.0.2 h1:UB7oTW3tw2zoMlsUdBEDAAbhQg9OudzgNeyCwQYZ730=
 github.com/extism/go-pdk v1.0.2/go.mod h1:Gz+LIU/YCKnKXhgge8yo5Yu1F/lbv7KtKFkiCSzW/P4=
+golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8 h1:ESSUROHIBHg7USnszlcdmjBEwdMj9VUvU+OPk4yl2mc=
+golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8/go.mod h1:/lliqkxwWAhPjf5oSOIJup2XcqJaw8RGS6k3TGEc7GI=
