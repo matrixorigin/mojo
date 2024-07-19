@@ -3,6 +3,7 @@ package main
 import (
     "encoding/json"
     "errors"
+    "fmt"
 
     "github.com/extism/go-pdk"
 )
@@ -42,6 +43,7 @@ func genseries_init() int32 {
         return -1
     }
 
+    pdk.OutputString(fmt.Sprintf("Start: %d, End %d, Step %d", gState.start, gState.end, gState.step))
     if gState.start <= gState.end {
         return 0
     }
