@@ -3,6 +3,7 @@ package main
 import (
     "encoding/json"
     "errors"
+    "strconv"
 
     "github.com/extism/go-pdk"
 )
@@ -50,16 +51,12 @@ func genseries_init() int32 {
 
     pdk.SetVar("state", []byte(save))
     pdk.OutputString(string(save))
-
-    if st.Start <= st.End {
-        return 0
-    }
-    return 1
+    return 0
 }
 
 //export genseries_next
 func genseries_next() int32 {
-    var res []int
+    var res []string
     var st state
 
     stbs := pdk.GetVar("state")
@@ -70,7 +67,7 @@ func genseries_next() int32 {
 
     for i:=0; i<10; i++ {
         if st.Start < st.End {
-            res = append(res, st.Start)
+            res = append(res, strconv.Itoa(st.Start))
             st.Start += st.Step
         } else {
             break
@@ -92,11 +89,7 @@ func genseries_next() int32 {
     }
 
     pdk.SetVar("state", []byte(save))
- 
-    if st.Start <= st.End {
-        return 0
-    }
-    return 1
+    return 0
 }
 
 // required for WASI build

@@ -3,3 +3,6 @@ genseries.wasm:
 
 run:
 	extism call genseries.wasm genseries_init --input '[1, 20]' --wasi
+
+clean:
+	rm -f genseries.wasm
