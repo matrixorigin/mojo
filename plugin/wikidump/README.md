@@ -26,7 +26,7 @@ Just run the following SQL,
 
 mysql> create stage mystage URL='file:///tmp/';
 
-mysql> select * from wasm_run_table('https://github.com/matrixone/mojo/raw/main/plugin/wikidump/wikidump.wasm', 'get_index', null, cast('stage://mystage/wiki/index.txt.bz2' as datalink)) as f limit 5;
+mysql> select * from moplugin_table('https://github.com/matrixone/mojo/raw/main/plugin/wikidump/wikidump.wasm', 'get_index', null, cast('stage://mystage/wiki/index.txt.bz2' as datalink)) as f limit 5;
 +--------------------------------------+
 | result                               |
 +--------------------------------------+
@@ -39,7 +39,7 @@ mysql> select * from wasm_run_table('https://github.com/matrixone/mojo/raw/main/
 5 rows in set (1.18 sec)
 
 
-mysql> select json_extract(result, "$.revision.text") from wasm_run_table('https://github.com/matrixone/mojo/raw/main/plugin/wikidump/wikidump.wasm', 
+mysql> select json_extract(result, "$.revision.text") from moplugin_table('https://github.com/matrixone/mojo/raw/main/plugin/wikidump/wikidump.wasm', 
 'get_pages', null, cast('stage://mystage/wiki/wiki.bz2?offset=557&size=707018' as datalink)) as f;
 
 ...
