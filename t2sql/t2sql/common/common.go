@@ -35,9 +35,16 @@ func ProjectRoot() string {
 	return root
 }
 
+type ColInfo struct {
+	Name        string
+	Type        string
+	Description string
+}
+
 type TableInfo struct {
-	Name string // table name
-	Sql  string // create table sql statement
+	Name     string // table name
+	Sql      string // create table sql statement
+	ColInfos []ColInfo
 }
 
 type DbInfo struct {

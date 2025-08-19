@@ -69,25 +69,10 @@ func TestCreateMoTables(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f1db := dbInfos["f1"]
-	if f1db == nil {
-		t.Fatal("f1db not found")
-	}
-
-	mo, err := OpenMoDB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mo.Close()
-
-	MustExec(mo, "DROP DATABASE IF EXISTS f1")
-	MustExec(mo, "CREATE DATABASE f1")
-	MustExec(mo, "USE f1")
-
-	for _, tableInfo := range f1db.TableInfos {
-		_, err = mo.Exec(tableInfo.Sql)
+	for _, dbInfo := range dbInfos {
+		t.Logf("Creating tables for %s\n", dbInfo.Name)
+		err = Spider2CreateMoTables(dbInfo)
 		if err != nil {
-			t.Logf("Error creating table %s:\n%s\n", tableInfo.Name, tableInfo.Sql)
 			t.Fatal(err)
 		}
 	}
