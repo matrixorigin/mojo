@@ -1,4 +1,4 @@
-package common
+package spider2
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/matrixorigin/mojo/t2sql/t2sql/common"
 )
 
 type ColInfoParsed struct {
@@ -15,14 +17,14 @@ type ColInfoParsed struct {
 	Description []string `json:"description"`
 }
 
-func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*DbInfo, error) {
+func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.DbInfo, error) {
 	dbDir := filepath.Join(dbInfoDir, dbName)
 	files, err := os.ReadDir(dbDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read dbDir: %s, %w", dbDir, err)
 	}
 
-	dbInfo := DbInfo{
+	dbInfo := common.DbInfo{
 		Name:    dbName,
 		SqlLite: filepath.Join(sqliteDir, dbName+".sqlite"),
 	}
@@ -43,7 +45,7 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*DbInfo, 
 				return nil, fmt.Errorf("cannot unmarshal json file: %s, %w", jsonFile, err)
 			}
 
-			var tableInfo TableInfo
+			var tableInfo common.TableInfo
 			tableInfo.Name = colParse.TableName
 			switch strings.ToLower(tableInfo.Name) {
 			case "match":
@@ -98,7 +100,7 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*DbInfo, 
 				} else {
 					tableInfo.Sql += ",\n"
 				}
-				tableInfo.ColInfos = append(tableInfo.ColInfos, ColInfo{
+				tableInfo.ColInfos = append(tableInfo.ColInfos, common.ColInfo{
 					Name:        colname,
 					Type:        coltype,
 					Description: colParse.Description[i],
@@ -110,10 +112,10 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*DbInfo, 
 	return &dbInfo, nil
 }
 
-func Spider2LoadDbInfo() (map[string]*DbInfo, error) {
-	dbInfos := make(map[string]*DbInfo)
+func Spider2LoadDbInfo() (map[string]*common.DbInfo, error) {
+	dbInfos := make(map[string]*common.DbInfo)
 
-	rootDir := ProjectRoot()
+	rootDir := common.ProjectRoot()
 	dbInfoDir := filepath.Join(rootDir, "repo3/Spider2/spider2-lite/resource/databases/sqlite")
 	sqliteDir := filepath.Join(rootDir, "repo3/data/spider2")
 	files, err := os.ReadDir(dbInfoDir)
@@ -132,17 +134,17 @@ func Spider2LoadDbInfo() (map[string]*DbInfo, error) {
 	return dbInfos, nil
 }
 
-func Spider2CreateMoTables(dbInfo *DbInfo) error {
+func Spider2CreateMoTables(dbInfo *common.DbInfo) error {
 	dbName := dbInfo.Name
-	mo, err := OpenMoDB()
+	mo, err := common.OpenMoDB()
 	if err != nil {
 		return fmt.Errorf("failed to open mo db: %s, %w", dbName, err)
 	}
 	defer mo.Close()
 
-	MustExec(mo, "DROP DATABASE IF EXISTS "+dbName)
-	MustExec(mo, "CREATE DATABASE "+dbName)
-	MustExec(mo, "USE "+dbName)
+	common.MustExec(mo, "DROP DATABASE IF EXISTS "+dbName)
+	common.MustExec(mo, "CREATE DATABASE "+dbName)
+	common.MustExec(mo, "USE "+dbName)
 
 	for _, tableInfo := range dbInfo.TableInfos {
 		_, err = mo.Exec(tableInfo.Sql)

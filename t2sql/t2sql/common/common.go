@@ -54,15 +54,6 @@ type DbInfo struct {
 	TableInfos []TableInfo
 }
 
-func LoadDbInfo() (map[string]*DbInfo, error) {
-	switch Suit {
-	case "spider2":
-		return Spider2LoadDbInfo()
-	default:
-		return nil, fmt.Errorf("unknown suit: %s", Suit)
-	}
-}
-
 func OpenMoDB() (*sql.DB, error) {
 	return sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", MoUser, MoPasswd, MoHost, MoDb))
 }

@@ -1,8 +1,10 @@
-package common
+package spider2
 
 import (
 	"database/sql"
 	"testing"
+
+	"github.com/matrixorigin/mojo/t2sql/t2sql/common"
 )
 
 func TestLoadDbInfo(t *testing.T) {
@@ -29,7 +31,7 @@ func TestSqliteRead(t *testing.T) {
 	}
 
 	t.Logf("Opening sqlite database: %s\n", f1db.SqlLite)
-	sqliteDB, err := OpenSqliteDB(f1db.SqlLite)
+	sqliteDB, err := common.OpenSqliteDB(f1db.SqlLite)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,12 +59,7 @@ func TestSqliteRead(t *testing.T) {
 }
 
 func TestCreateMoTables(t *testing.T) {
-	ParseArgs()
-
-	t.Logf("MoHost: %s\n", MoHost)
-	t.Logf("MoUser: %s\n", MoUser)
-	t.Logf("MoPasswd: %s\n", MoPasswd)
-	t.Logf("MoDb: %s\n", MoDb)
+	common.ParseArgs()
 
 	dbInfos, err := Spider2LoadDbInfo()
 	if err != nil {
