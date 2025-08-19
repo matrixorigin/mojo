@@ -46,6 +46,7 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 			}
 
 			var tableInfo common.TableInfo
+			tableInfo.OrigName = colParse.TableName
 			tableInfo.Name = colParse.TableName
 			switch strings.ToLower(tableInfo.Name) {
 			case "match":
@@ -77,7 +78,10 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 
 				switch coltype {
 				case "NUM":
-					coltype = "float"
+					// this NUM thing is in the f1 database, it is a datetime, or time.
+					// many other _date/time columns in f1 database used text type, so,
+					// we use text type too.
+					coltype = "text"
 				case "", "BLOB SUB_TYPE TEXT", "point":
 					coltype = "text"
 				case "jsonb":
@@ -96,15 +100,43 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 
 				tableInfo.Sql += fmt.Sprintf("%s %s", colname, coltype)
 				if i == len(colParse.Colnames)-1 {
+					if dbName == "f1" && (tableInfo.Name == "lap_times" || tableInfo.Name == "pit_stops") {
+						tableInfo.Sql += ",\n"
+						tableInfo.ColInfos = append(tableInfo.ColInfos, common.ColInfo{
+							Name:        colname,
+							Type:        coltype,
+							OrigName:    colParse.Colnames[i],
+							OrigType:    colParse.Coltypes[i],
+							Description: colParse.Description[i],
+						})
+						tableInfo.Sql += "seconds float"
+						colname = "seconds"
+						coltype = "float"
+					}
 					tableInfo.Sql += ");\n"
 				} else {
 					tableInfo.Sql += ",\n"
 				}
+
 				tableInfo.ColInfos = append(tableInfo.ColInfos, common.ColInfo{
 					Name:        colname,
 					Type:        coltype,
+					OrigName:    colParse.Colnames[i],
+					OrigType:    colParse.Coltypes[i],
 					Description: colParse.Description[i],
 				})
+
+				// add an extra column full_name
+				if dbName == "f1" && tableInfo.Name == "drivers" && colname == "surname" {
+					tableInfo.Sql += "full_name text,\n"
+					tableInfo.ColInfos = append(tableInfo.ColInfos, common.ColInfo{
+						Name:        "full_name",
+						Type:        "text",
+						OrigName:    "full_name",
+						OrigType:    "text",
+						Description: "full name",
+					})
+				}
 			}
 			dbInfo.TableInfos = append(dbInfo.TableInfos, tableInfo)
 		}

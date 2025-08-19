@@ -1,11 +1,15 @@
 package common
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/csv"
 	"flag"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
@@ -38,11 +42,14 @@ func ProjectRoot() string {
 type ColInfo struct {
 	Name        string
 	Type        string
+	OrigName    string
+	OrigType    string
 	Description string
 }
 
 type TableInfo struct {
 	Name     string // table name
+	OrigName string // original table name
 	Sql      string // create table sql statement
 	ColInfos []ColInfo
 }
@@ -60,6 +67,72 @@ func OpenMoDB() (*sql.DB, error) {
 
 func OpenSqliteDB(name string) (*sql.DB, error) {
 	return sql.Open("sqlite3", name)
+}
+
+func ReadSqliteRows(file string, sqlStr string, args ...any) ([][]sql.NullString, error) {
+	db, err := OpenSqliteDB(file)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	rows, err := db.Query(sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ret [][]sql.NullString
+	colNames, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	ncol := len(colNames)
+	datap := make([]any, ncol)
+	for rows.Next() {
+		data := make([]sql.NullString, ncol)
+		for i := 0; i < ncol; i++ {
+			datap[i] = &data[i]
+		}
+		err = rows.Scan(datap...)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, data)
+	}
+	return ret, nil
+}
+
+var timetzRegex = regexp.MustCompile(`\d{4}.\d{2}.\d{2}T\d{2}:\d{2}:\d{2}Z`)
+
+func ReadSqliteCsv(file string, sqlStr string, args ...any) (string, error) {
+	rows, err := ReadSqliteRows(file, sqlStr, args...)
+	if err != nil {
+		return "", err
+	}
+
+	buf := bytes.NewBufferString("")
+	writer := csv.NewWriter(buf)
+
+	rowStr := make([]string, len(rows[0]))
+	for _, row := range rows {
+		for i, col := range row {
+			if col.Valid {
+				rowStr[i] = col.String
+			} else {
+				rowStr[i] = ""
+			}
+			if timetzRegex.MatchString(rowStr[i]) {
+				rowStr[i] = strings.ReplaceAll(rowStr[i], "T", " ")
+				rowStr[i] = rowStr[i][:len(rowStr[i])-1]
+			}
+		}
+		writer.Write(rowStr)
+	}
+	writer.Flush()
+
+	return buf.String(), nil
 }
 
 func MustExec(db *sql.DB, sql string, args ...interface{}) {

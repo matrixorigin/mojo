@@ -1,7 +1,6 @@
 package spider2
 
 import (
-	"database/sql"
 	"testing"
 
 	"github.com/matrixorigin/mojo/t2sql/t2sql/common"
@@ -23,39 +22,33 @@ func TestLoadDbInfo(t *testing.T) {
 	}
 }
 
-func TestSqliteRead(t *testing.T) {
+func TestSqliteReadF1(t *testing.T) {
 	dbInfos, err := Spider2LoadDbInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	f1db := dbInfos["f1"]
 	if f1db == nil {
 		t.Fatal("f1db not found")
 	}
 
 	t.Logf("Opening sqlite database: %s\n", f1db.SqlLite)
-	sqliteDB, err := common.OpenSqliteDB(f1db.SqlLite)
+	rows, err := common.ReadSqliteRows(f1db.SqlLite, "SELECT * FROM drivers LIMIT 5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sqliteDB.Close()
 
-	rows, err := sqliteDB.Query("SELECT * FROM drivers LIMIT 10")
+	for _, row := range rows {
+		t.Logf("row: %v\n", row)
+	}
+
+	csv, err := common.ReadSqliteCsv(f1db.SqlLite, "SELECT * FROM drivers LIMIT 5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		data := make([]sql.NullString, 10)
-		datap := make([]any, 10)
-		for i := 0; i < 10; i++ {
-			datap[i] = &data[i]
-		}
-
-		err = rows.Scan(datap...)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Logf("data: %v\n", data)
-	}
+	t.Logf("csv: %s\n", csv)
 }
 
 func TestCreateMoTables(t *testing.T) {
@@ -70,6 +63,62 @@ func TestCreateMoTables(t *testing.T) {
 		t.Logf("Creating tables for %s\n", dbInfo.Name)
 		err = Spider2CreateMoTables(dbInfo)
 		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestLoadMoTableF1(t *testing.T) {
+	common.ParseArgs()
+
+	dbInfos, err := Spider2LoadDbInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f1dbInfo := dbInfos["f1"]
+	if f1dbInfo == nil {
+		t.Fatal("f1db not found")
+	}
+
+	mo, err := common.OpenMoDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mo.Close()
+
+	common.MustExec(mo, "USE f1")
+
+	for _, tableInfo := range f1dbInfo.TableInfos {
+		data, err := common.ReadSqliteCsv(f1dbInfo.SqlLite, "SELECT * FROM \""+tableInfo.OrigName+"\"")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		loadSql := "load data inline format='csv', data=$$\n" + data + "$$ into table " + tableInfo.Name
+		t.Logf("loadSql table: %s -> %s\n", tableInfo.OrigName, tableInfo.Name)
+
+		_, err = mo.Exec(loadSql)
+		if err != nil {
+			// debug:
+			sqliteDB, err2 := common.OpenSqliteDB(f1dbInfo.SqlLite)
+			if err2 != nil {
+				t.Fatal(err2)
+			}
+			defer sqliteDB.Close()
+
+			rows, err2 := sqliteDB.Query("SELECT * FROM \"" + tableInfo.OrigName + "\"")
+			if err2 != nil {
+				t.Fatal(err2)
+			}
+			defer rows.Close()
+
+			colNames, err2 := rows.Columns()
+			if err2 != nil {
+				t.Fatal(err2)
+			}
+
+			t.Logf("colNames: %v\n", colNames)
 			t.Fatal(err)
 		}
 	}
