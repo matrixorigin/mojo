@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/mattn/go-sqlite3"
@@ -104,7 +103,28 @@ func ReadSqliteRows(file string, sqlStr string, args ...any) ([][]sql.NullString
 	return ret, nil
 }
 
-var timetzRegex = regexp.MustCompile(`\d{4}.\d{2}.\d{2}T\d{2}:\d{2}:\d{2}Z`)
+var timetzRegex = regexp.MustCompile(`^\d{4}.\d{2}.\d{2}.\d{2}:\d{2}:\d{2}`)
+
+func ConvertSqliteToMo(value sql.NullString) (string, bool) {
+	if !value.Valid {
+		return "", false
+	}
+
+	// Nan and Inf are converted to null
+	switch value.String {
+	case "NaN", "inf", "\\N", "null", "NULL":
+		return "", false
+	}
+
+	ret := value.String
+	if timetzRegex.MatchString(ret) {
+		ret = ret[:len("2000-11-11 00:00:00")]
+		bs := []byte(ret)
+		bs[10] = ' '
+		ret = string(bs)
+	}
+	return ret, true
+}
 
 func ReadSqliteCsv(file string, sqlStr string, args ...any) (string, error) {
 	rows, err := ReadSqliteRows(file, sqlStr, args...)
@@ -118,21 +138,47 @@ func ReadSqliteCsv(file string, sqlStr string, args ...any) (string, error) {
 	rowStr := make([]string, len(rows[0]))
 	for _, row := range rows {
 		for i, col := range row {
-			if col.Valid {
-				rowStr[i] = col.String
-			} else {
-				rowStr[i] = ""
-			}
-			if timetzRegex.MatchString(rowStr[i]) {
-				rowStr[i] = strings.ReplaceAll(rowStr[i], "T", " ")
-				rowStr[i] = rowStr[i][:len(rowStr[i])-1]
-			}
+			tmpStr, _ := ConvertSqliteToMo(col)
+			rowStr[i] = tmpStr
 		}
 		writer.Write(rowStr)
 	}
 	writer.Flush()
 
 	return buf.String(), nil
+}
+
+func ReadSqliteCsvBatches(file string, sqlStr string, args ...any) ([]string, error) {
+	rows, err := ReadSqliteRows(file, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	var ret []string
+
+	buf := bytes.NewBufferString("")
+	writer := csv.NewWriter(buf)
+
+	rowStr := make([]string, len(rows[0]))
+	for rowIdx, row := range rows {
+		for i, col := range row {
+			tmpStr, _ := ConvertSqliteToMo(col)
+			rowStr[i] = tmpStr
+		}
+		writer.Write(rowStr)
+		if (rowIdx+1)%1024 == 0 {
+			writer.Flush()
+			ret = append(ret, buf.String())
+			buf = bytes.NewBufferString("")
+			writer = csv.NewWriter(buf)
+		}
+	}
+	writer.Flush()
+	lastBatch := buf.String()
+	if len(lastBatch) > 0 {
+		ret = append(ret, buf.String())
+	}
+	return ret, nil
 }
 
 func MustExec(db *sql.DB, sql string, args ...interface{}) {

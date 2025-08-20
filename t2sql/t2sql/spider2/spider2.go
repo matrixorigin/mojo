@@ -3,6 +3,7 @@ package spider2
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,13 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 	dbInfo := common.DbInfo{
 		Name:    dbName,
 		SqlLite: filepath.Join(sqliteDir, dbName+".sqlite"),
+	}
+
+	switch dbName {
+	case "DB_IMDB":
+		dbInfo.SqlLite = filepath.Join(sqliteDir, "Db-IMDB.sqlite")
+	case "SQLITE_SAKILA":
+		dbInfo.SqlLite = filepath.Join(sqliteDir, "sqlite-sakila.sqlite")
 	}
 
 	for _, file := range files {
@@ -84,6 +92,15 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 					coltype = "text"
 				case "", "BLOB SUB_TYPE TEXT", "point":
 					coltype = "text"
+				case "INTEGER":
+					switch colname {
+					case "height", "weight":
+						// some measurements are not integers.
+						coltype = "real"
+					default:
+						// some data has int overflow, use bigint to be safe.
+						coltype = "bigint"
+					}
 				case "jsonb":
 					coltype = "json"
 				case "timestamp with time zone":
@@ -183,6 +200,65 @@ func Spider2CreateMoTables(dbInfo *common.DbInfo) error {
 		if err != nil {
 			return fmt.Errorf("failed to create db %s, table %s: %w", dbName, tableInfo.Name, err)
 		}
+	}
+	return nil
+}
+
+func LoadMoDB(dbInfo *common.DbInfo) error {
+	mo, err := common.OpenMoDB()
+	if err != nil {
+		return fmt.Errorf("failed to open mo db: %s, %w", dbInfo.Name, err)
+	}
+	defer mo.Close()
+
+	common.MustExec(mo, "USE "+dbInfo.Name)
+
+	for _, tableInfo := range dbInfo.TableInfos {
+		log.Printf("Loading db %s table %s -> %s\n", dbInfo.Name, tableInfo.OrigName, tableInfo.Name)
+		rows, err := common.ReadSqliteRows(dbInfo.SqlLite, "SELECT * FROM \""+tableInfo.OrigName+"\"")
+		if err != nil {
+			return err
+		}
+
+		stmt := "INSERT INTO " + tableInfo.Name + " VALUES ("
+		for i := range tableInfo.ColInfos {
+			stmt += "?"
+			if i < len(tableInfo.ColInfos)-1 {
+				stmt += ","
+			}
+		}
+		stmt += ");"
+
+		rowBuf := make([]any, len(tableInfo.ColInfos))
+
+		tx, err := mo.Begin()
+		prepareStmt, err := tx.Prepare(stmt)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("cannot prepare statement: %s, %w", stmt, err)
+		}
+		defer prepareStmt.Close()
+
+		for _, row := range rows {
+			for colIdx, col := range row {
+				tmpStr, ok := common.ConvertSqliteToMo(col)
+				if !ok {
+					rowBuf[colIdx] = nil
+				} else if tmpStr == "" {
+					rowBuf[colIdx] = nil
+				} else {
+					rowBuf[colIdx] = tmpStr
+				}
+			}
+			_, err = prepareStmt.Exec(rowBuf...)
+			if err != nil {
+				tx.Rollback()
+				return fmt.Errorf("cannot exec statement: %s, %v,%w", stmt, row, err)
+			}
+		}
+		tx.Commit()
+		log.Printf("Done load db %s table %s, %d rows\n", dbInfo.Name, tableInfo.OrigName, len(rows))
+
 	}
 	return nil
 }

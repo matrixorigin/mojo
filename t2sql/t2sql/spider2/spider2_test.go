@@ -51,7 +51,7 @@ func TestSqliteReadF1(t *testing.T) {
 	t.Logf("csv: %s\n", csv)
 }
 
-func TestCreateMoTables(t *testing.T) {
+func TestCreateMoDB(t *testing.T) {
 	common.ParseArgs()
 
 	dbInfos, err := Spider2LoadDbInfo()
@@ -68,6 +68,22 @@ func TestCreateMoTables(t *testing.T) {
 	}
 }
 
+func TestLoadMoDB(t *testing.T) {
+	common.ParseArgs()
+
+	dbInfos, err := Spider2LoadDbInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, dbInfo := range dbInfos {
+		t.Logf("Loading %s\n", dbInfo.Name)
+		err = LoadMoDB(dbInfo)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func TestLoadMoTableF1(t *testing.T) {
 	common.ParseArgs()
 
