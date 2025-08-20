@@ -105,7 +105,7 @@ func ReadSqliteRows(file string, sqlStr string, args ...any) ([][]sql.NullString
 
 var timetzRegex = regexp.MustCompile(`^\d{4}.\d{2}.\d{2}.\d{2}:\d{2}:\d{2}`)
 
-func ConvertSqliteToMo(value sql.NullString) (string, bool) {
+func ConvertSqliteToMo(value sql.NullString, tgtType string) (string, bool) {
 	if !value.Valid {
 		return "", false
 	}
@@ -117,7 +117,7 @@ func ConvertSqliteToMo(value sql.NullString) (string, bool) {
 	}
 
 	ret := value.String
-	if timetzRegex.MatchString(ret) {
+	if (tgtType == "timestamp" || tgtType == "datetime" || tgtType == "date") && timetzRegex.MatchString(ret) {
 		ret = ret[:len("2000-11-11 00:00:00")]
 		bs := []byte(ret)
 		bs[10] = ' '
@@ -138,7 +138,7 @@ func ReadSqliteCsv(file string, sqlStr string, args ...any) (string, error) {
 	rowStr := make([]string, len(rows[0]))
 	for _, row := range rows {
 		for i, col := range row {
-			tmpStr, _ := ConvertSqliteToMo(col)
+			tmpStr, _ := ConvertSqliteToMo(col, "")
 			rowStr[i] = tmpStr
 		}
 		writer.Write(rowStr)
@@ -162,7 +162,7 @@ func ReadSqliteCsvBatches(file string, sqlStr string, args ...any) ([]string, er
 	rowStr := make([]string, len(rows[0]))
 	for rowIdx, row := range rows {
 		for i, col := range row {
-			tmpStr, _ := ConvertSqliteToMo(col)
+			tmpStr, _ := ConvertSqliteToMo(col, "")
 			rowStr[i] = tmpStr
 		}
 		writer.Write(rowStr)

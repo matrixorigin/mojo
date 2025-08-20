@@ -63,7 +63,7 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 
 			tableInfo.Sql = fmt.Sprintf("CREATE TABLE %s (", tableInfo.Name)
 			for i, colname := range colParse.Colnames {
-				coltype := colParse.Coltypes[i]
+				coltype := strings.ToLower(colParse.Coltypes[i])
 				switch colname {
 				case "rank", "index", "table", "column", "group", "range",
 					"cross", "change":
@@ -85,14 +85,14 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 				}
 
 				switch coltype {
-				case "NUM":
+				case "num":
 					// this NUM thing is in the f1 database, it is a datetime, or time.
 					// many other _date/time columns in f1 database used text type, so,
 					// we use text type too.
 					coltype = "text"
-				case "", "BLOB SUB_TYPE TEXT", "point":
+				case "", "blob sub_type text", "point":
 					coltype = "text"
-				case "INTEGER":
+				case "integer":
 					switch colname {
 					case "height", "weight":
 						// some measurements are not integers.
@@ -107,12 +107,18 @@ func loadOneDbInfo(dbInfoDir string, sqliteDir string, dbName string) (*common.D
 					coltype = "timestamp"
 				}
 
-				if strings.HasPrefix(strings.ToLower(coltype), "nvarchar") {
+				if strings.HasPrefix(coltype, "nvarchar") {
 					coltype = "text"
 				}
 
-				if strings.HasPrefix(strings.ToLower(coltype), "character") {
+				if strings.HasPrefix(coltype, "character") {
 					coltype = "varchar(255)"
+				}
+
+				// numeric/decicaml should be fine, but we convert it to real due to
+				// https://github.com/matrixorigin/matrixone/issues/22396
+				if strings.HasPrefix(coltype, "numeric") || strings.HasPrefix(coltype, "decimal") {
+					coltype = "real"
 				}
 
 				tableInfo.Sql += fmt.Sprintf("%s %s", colname, coltype)
@@ -241,7 +247,7 @@ func LoadMoDB(dbInfo *common.DbInfo) error {
 
 		for _, row := range rows {
 			for colIdx, col := range row {
-				tmpStr, ok := common.ConvertSqliteToMo(col)
+				tmpStr, ok := common.ConvertSqliteToMo(col, tableInfo.ColInfos[colIdx].Type)
 				if !ok {
 					rowBuf[colIdx] = nil
 				} else if tmpStr == "" {
