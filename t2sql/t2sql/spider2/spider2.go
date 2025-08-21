@@ -1,6 +1,7 @@
 package spider2
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -266,5 +267,101 @@ func LoadMoDB(dbInfo *common.DbInfo) error {
 		log.Printf("Done load db %s table %s, %d rows\n", dbInfo.Name, tableInfo.OrigName, len(rows))
 
 	}
+	return nil
+}
+
+type Spider2QueryParsed struct {
+	Id                string `json:"instance_id"`
+	Db                string `json:"db"`
+	Question          string `json:"question"`
+	ExternalKnowledge string `json:"external_knowledge"`
+}
+
+func LoadQueries() error {
+	rootDir := common.ProjectRoot()
+	jsonFilePath := filepath.Join(rootDir, "repo3/Spider2/spider2-lite/spider2-lite.jsonl")
+	extKnowledgeDir := filepath.Join(rootDir, "repo3/Spider2/spider2-lite/resource/")
+	goldDir := filepath.Join(rootDir, "repo3/Spider2/spider2-lite/evaluation_suite/gold/sql")
+
+	mo, err := common.OpenMoDB()
+	if err != nil {
+		return fmt.Errorf("failed to open mo db: %w", err)
+	}
+	defer mo.Close()
+
+	common.MustExec(mo, "DROP DATABASE IF EXISTS spider2")
+	common.MustExec(mo, "CREATE DATABASE spider2")
+	common.MustExec(mo, "USE spider2")
+
+	common.MustExec(mo, "DROP STAGE IF EXISTS ext_knowledge")
+	common.MustExec(mo, "CREATE STAGE ext_knowledge URL = 'file://"+extKnowledgeDir+"'")
+	common.MustExec(mo, `CREATE TABLE queries (id varchar(100) not null primary key , 
+	                            db varchar(100), question text, 
+	                            external_knowledge datalink, 
+								sqlite_gold text,
+								sf_gold text
+		            )`)
+
+	jsonFile, err := os.Open(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to open jsonl file: %s, %w", jsonFilePath, err)
+	}
+	defer jsonFile.Close()
+
+	stmt := `INSERT INTO queries (id, db, question, external_knowledge, sqlite_gold, sf_gold) 
+	                     VALUES (?, ?, ?, cast(cast(? as varchar) as datalink), ?, ?)`
+	prepareStmt, err := mo.Prepare(stmt)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %s, %w", stmt, err)
+	}
+	defer prepareStmt.Close()
+
+	count := 0
+	countGold := 0
+	countSfGold := 0
+
+	scanner := bufio.NewScanner(jsonFile)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		var query Spider2QueryParsed
+		err := json.Unmarshal(line, &query)
+		if err != nil {
+			return fmt.Errorf("failed to unmarshal jsonl file: %s, %w", jsonFilePath, err)
+		}
+
+		var goldSql, sfGoldSql string
+		sqliteGoldFile := filepath.Join(goldDir, query.Id+".sql")
+		if _, err := os.Stat(sqliteGoldFile); err == nil {
+			sqliteGold, err := os.ReadFile(sqliteGoldFile)
+			if err == nil {
+				goldSql = string(sqliteGold)
+				countGold++
+			} else {
+				log.Printf("failed to read sqlite gold file: %s, %v", sqliteGoldFile, err)
+			}
+		}
+		sfGoldFile := filepath.Join(goldDir, "sf_"+query.Id+".sql")
+		if _, err := os.Stat(sfGoldFile); err == nil {
+			sfGold, err := os.ReadFile(sfGoldFile)
+			if err == nil {
+				sfGoldSql = string(sfGold)
+				countSfGold++
+			} else {
+				log.Printf("failed to read sf gold file: %s, %v", sfGoldFile, err)
+			}
+		}
+
+		var pExt any
+		if query.ExternalKnowledge != "" {
+			pExt = "stage://ext_knowledge/documents/" + query.ExternalKnowledge
+		}
+		_, err = prepareStmt.Exec(query.Id, query.Db, query.Question, pExt, goldSql, sfGoldSql)
+		if err != nil {
+			return fmt.Errorf("failed to exec statement: %s, %w", stmt, err)
+		}
+		count++
+	}
+
+	log.Printf("loaded %d queries, %d gold, %d sf gold", count, countGold, countSfGold)
 	return nil
 }

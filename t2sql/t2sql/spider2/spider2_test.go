@@ -84,58 +84,12 @@ func TestLoadMoDB(t *testing.T) {
 		}
 	}
 }
-func TestLoadMoTableF1(t *testing.T) {
+
+func TestLoadQueries(t *testing.T) {
 	common.ParseArgs()
 
-	dbInfos, err := Spider2LoadDbInfo()
+	err := LoadQueries()
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	f1dbInfo := dbInfos["f1"]
-	if f1dbInfo == nil {
-		t.Fatal("f1db not found")
-	}
-
-	mo, err := common.OpenMoDB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer mo.Close()
-
-	common.MustExec(mo, "USE f1")
-
-	for _, tableInfo := range f1dbInfo.TableInfos {
-		data, err := common.ReadSqliteCsv(f1dbInfo.SqlLite, "SELECT * FROM \""+tableInfo.OrigName+"\"")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		loadSql := "load data inline format='csv', data=$$\n" + data + "$$ into table " + tableInfo.Name
-		t.Logf("loadSql table: %s -> %s\n", tableInfo.OrigName, tableInfo.Name)
-
-		_, err = mo.Exec(loadSql)
-		if err != nil {
-			// debug:
-			sqliteDB, err2 := common.OpenSqliteDB(f1dbInfo.SqlLite)
-			if err2 != nil {
-				t.Fatal(err2)
-			}
-			defer sqliteDB.Close()
-
-			rows, err2 := sqliteDB.Query("SELECT * FROM \"" + tableInfo.OrigName + "\"")
-			if err2 != nil {
-				t.Fatal(err2)
-			}
-			defer rows.Close()
-
-			colNames, err2 := rows.Columns()
-			if err2 != nil {
-				t.Fatal(err2)
-			}
-
-			t.Logf("colNames: %v\n", colNames)
-			t.Fatal(err)
-		}
 	}
 }
