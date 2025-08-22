@@ -64,6 +64,10 @@ func OpenMoDB() (*sql.DB, error) {
 	return sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", MoUser, MoPasswd, MoHost, MoDb))
 }
 
+func OpenMoDBName(dbName string) (*sql.DB, error) {
+	return sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", MoUser, MoPasswd, MoHost, dbName))
+}
+
 func OpenSqliteDB(name string) (*sql.DB, error) {
 	return sql.Open("sqlite3", name)
 }

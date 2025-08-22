@@ -93,3 +93,12 @@ func TestLoadQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLoadMoGold(t *testing.T) {
+	common.ParseArgs()
+
+	err := LoadMoGold()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
