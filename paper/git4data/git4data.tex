@@ -3,6 +3,15 @@
 \usepackage[english]{babel}
 \usepackage{graphicx}
 \usepackage{svg}
+
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily,
+  columns=fullflexible,
+  keepspaces=true,
+  %% breaklines=true,
+  %% breakatwhitespace=true,
+  %% frame=single,
+}
 %% \usepackage{blindtext}
 
 % Copyright
@@ -24,7 +33,7 @@
 %%
 %% The "title" command has an optional parameter,
 %% allowing the author to define a "short title" to be used in page headers.
-\title{Version Control Systewm For Data With MatrixOne}
+\title{Version Control System For Data With MatrixOne}
 
 %%
 %% The "author" command and its associated commands are used to define
@@ -69,58 +78,78 @@
 %% article.
 \begin{abstract}
 We have developed a relational database system called MatrixOne, which has 
-a powerful snapshot system.  User can perform git-like operations on 
-large amount of data almost instantly, thus bring the power of version 
-control to data-engineering in the same way as git to software engineering.
+an efficient and powerful snapshot system.  User can perform git-like operations on 
+large amount of data almost instantly using the snapshot system. 
+This brings the power and convenience 
+of data version control to data engineering in the same way as soucrce code 
+version control system to software engineering.
 Data engineers can perform branch, diff, merge, revert, etc on terabytes of data 
 without fear of losing data or causing data corruptions.
 \end{abstract}
 
 \maketitle
 
-\section{Introduction}
+\section{Introduction}\label{sec:intro}
 Artificial Intelligence (AI), especially technologies such as deep learning 
 and large language model (LLM) is experiencing a period of explosive 
 growth.  Many experts consider data as the fuel that powers the AI revolution.
-Every step of building a great AI system, from pre-train to prompting, all 
+Every step of building a great AI system, from pre-train, fine-tuning, to prompting, all 
 depends on large amount of high quality data.
 
 The ever increasing importance of data to AI systems has given rise to the
 field of data engineering.   A significant amount of AI development is actually
-data processing and feature engineering.   The result is that data for AI is much 
-more dynamic.  People does not only analyzing static data, but also need to clean
+data processing and feature engineering.   The result is that data for AI system 
+is much 
+more dynamic.  Engineers do not only need to analyze static data, but also need to clean
 and modify data, to label data (either by human or by LLM), and to manage labels.
-A software project is not only building code, but more and more becoming a data project.
+An AI project is not only about building code, but more and more often, becomes a data project.
 
 Version control system (VCS) is among the most important tools in a software 
-engineer's daily work.  Its history dates back to earliest days of software
+engineer's daily work.  Its history dates back to the earliest days of software
 engineering.  Git \cite{Git} and git services such as GitHub has become the standard
 tool for software engineers to manage their code.   However, for data engineers,
-there is little help.  Manage large amount of data using for example git is slow
-and tools such as diff/merge in general do not work well.  People often choose 
-to store data in file system or in object stores such as S3, but modifying many 
-large files is difficult, slow, and error prone.
+there is little help.  Managing large amount of data using a VCS designed for managing
+code is slow. Tools such as diff and merge in general do not work well for large amount of data,
+or not work at all.  People often choose to store billions of records in file system or in 
+object stores such as S3 \cite{S3}, but modifying such large files, especially when a team of 
+engineers need to work on the same dataset, is difficult, slow, and error prone.
 
-MatrixOrigin has developped a relational database system called MatrixOne. 
+A database system is a much better tool for managing this kind
+of dataset.  Modifying data using SQL insert, delete, and update 
+is much easier and faster.  Database transactions can support many 
+users to work on a dataset concurrently.  Privacy and security are also
+major concerns in data engineering and a database system usually has 
+many mature built-in features like authentication, authorization, role based 
+access control (RBAC). 
+
+However, the way that a data engineer works with data is different from 
+conventional transaction processing or analytical processing of a database. 
+The data engineer may prefer to work on a copy of the dataset, make modifications,
+conduct experiments, revert data to a previous state if the experiment fails,
+and finally merge the changes back to the original dataset.
+The workflow is similar to the way that a software engineer works with code
+and requires tools to support version control operations on data.
+
+MatrixOne is a cloud native relational database system developed by MatrixOrigin.
 It has a powerful and efficient snapshot system that enables version control
 for large amount of data.  If we consider a database as git repository and 
-table as a file in git, we can support all day to day git operations such as
+table as a file in git, MatrixOne can support all day to day git operations such as
 clone/branch, push/pull, diff, merge, revert, on terabytes of data almost 
 instantly.
 
-In the rest of this paper, we will introduce the version control operations
+In the rest of this paper, we will first introduce the version control operations
 supported by MatrixOne.  We explain the semantics of these operations and 
-walk through a typical day to day usage of MatrixOne to work with data version 
-control.  Next we will discuss the implementation of snapshot system in 
-MatrixOne, followed by the implementation of some of the version control 
+walk through a typical day to day workflow of a data engineer using MatrixOne.
+Then we will explain the implementation of then snapshot system in 
+MatrixOne, followed by the implementation of the version control 
 operations like diff/merge.  Finally, we will explore some of the 
-future directions.
+future directions and possible improvements.
 
 \section{Version Control Operations}\label{sec:vcop}
 Let's consider table \texttt{T(a int, b varchar, c json)} in a database.  
 We can refer to a snapshot of \texttt{T} at timestamp
-ts as \texttt{T\{mo\_ts = ts\}}.  For example, user can read a table at a specific
-timestamp using 
+\texttt{ts} as \texttt{T\{mo\_ts = ts\}}.  For example, user can read a table 
+at a specific timestamp using 
 \begin{verbatim}
   SELECT * FROM T{mo_ts='2025-09-12 12:34:56'}
 \end{verbatim}
@@ -128,153 +157,201 @@ MatrixOne supports PITR (Point In Time Recovery) and by default, user can refer
 to a snapshot of a table within 24 hours.  User can also create a named snapshot
 for a table using 
 \begin{verbatim}
-  CREATE SNAPSHOT snapshot1 FOR TABLE T
+  CREATE SNAPSHOT sn1 FOR TABLE T
 \end{verbatim}  
-and refer to it using \texttt{T\{snapshot = 'sn1'\}}.  
-Viewed from version control perspective, a named snapshot corresponds to a git tag.
-A table without a timestamp or named snapshot specified refers to the table
-at current timestamp.
+and later refer to it in SQL using \texttt{T\{snapshot = 'sn1'\}}.  
+In the rest of this paper, we will use a shorter notation 
+$T_{sn1}$ for  \texttt{T\{snapshot = 'sn1'\}}. 
+A table without a timestamp or named snapshot specification refers to the table
+at current timestamp. Viewed from version control's perspective, timestamp based snapshot
+corresponds to a git commit and a named snapshot corresponds to a git tag.
+
 User can also take a snapshot of a database, which is the collection of snapshots 
-of all tables in the database.  Later in this paper we will only discuss 
+of all tables in the database.  All the snapshot operations on a table can be performed
+on a database as well.  Later in this paper we will only discuss 
 snapshot of a table.
 
-User can clone a table from a snapshot using 
+User can create a new table by cloning a table from a snapshot \texttt{sn1} using 
 \begin{verbatim}
   CREATE TABLE TClone FROM SNAPSHOT T{snapshot='sn1'}
 \end{verbatim}
-Cloning a table roughly corresponds to cloning a git repository or
-creating a new branch from a git tag.  Once cloned, T and TClone are 
-separate tables and insert, delete, update to T and TClone are 
-independent.  Now let's assume after creating TClone, user modified data
-in both tables and created new snapshot \texttt{sn2} on T and snapshot \texttt{sn3} on TClone. 
-\begin{verbatim}
-  T:             --> sn1 --> sn2 --> 
-                      |
-  TClone:             |----> sn3 --> 
-\end{verbatim}
-We say that \texttt{T\{snapshot='sn2'\}} and \texttt{TClone\{snapshot='sn3'\}} 
-share a common base revision \texttt{T\{snapshot='sn1'\}}.
+The result table \texttt{TClone} has the same schema (including 
+the primary key definition) and data.  Cloning a table roughly 
+corresponds to cloning a git repository or creating a new branch 
+from a git tag from version control's perspective.  
+Once cloned, \texttt{T} and \texttt{TClone} are 
+separate tables and user can perform insert, delete, update 
+to \texttt{T} and \texttt{TClone} 
+independently.  
+
+Now let's look at an example of a workflow of a user of data version 
+control system.   After creating \texttt{TClone}, user can modified 
+data in both \texttt{T} and \texttt{TClone}, and created new 
+snapshot \texttt{sn2} on \texttt{T} and snapshot \texttt{sn3} 
+on \texttt{TClone}.  Later user want to merge changes 
+from $TClone_{sn3}$ back to \texttt{T} to get 
+\texttt{sn4}.  This workflow is shown in Listing\ref{lst:wf}.
+\begin{lstlisting}[label=lst:wf,caption=Branching and Merging Workflow]
+  T:       --> sn1 --> sn2 ------>  sn4 --> 
+               |              |
+  TClone:      |-----> sn3 ---|
+           ----------- now  ---------> time
+\end{lstlisting}
+In this example workflow, we say that $T_{sn2}$ and $TClone_{sn3}$ 
+share a common base revision $T_{sn1}$. 
 
 Like git, user can push/pull changes from one table to another by 
 restoring a snapshot.  For example, user can pull the more recent 
-changes in sn2 from T to TClone using \begin{verbatim}
+changes in $T_{sn2}$ to table \texttt{TClone} using 
+\begin{verbatim}
   RESTORE TABLE TClone FROM
         SNAPSHOT T{snapshot='sn2'}
 \end{verbatim}
-Restore will overwrite all modifications in TClone and completely replace 
-data of TClone with \texttt{T\{snapshot='sn2'\}}.  It is equivalent to 
+Restore will overwrite all modifications in $TClone_{sn3}$ and completely replace 
+data of \texttt{TClone} with data of $T_{sn2}$.  It is equivalent to 
 \texttt{git reset --hard sn2}.
 
-User can diff two snapshots using 
+User can diff two snapshots, may or may not be of the same table, using 
 \begin{verbatim}
-  SNAPSHOT DIFF T{snapshot='sn1'} 
-         AND TClone{snapshot='snX'}
+  SNAPSHOT DIFF T{snapshot='sn2'} 
+         AND TClone{snapshot='sn3'}
 \end{verbatim}  
-Logically, \texttt{SNAPSHOT DIFF} returns the result of the following SQL query:
-\begin{verbatim}
+\texttt{SNAPSHOT DIFF} treats tables as an unordered multi-sets of rows and its result 
+is the result of the following SQL query:
+%% \begin{verbatim}
+\begin{lstlisting}[label=lst:diff,caption=SNAPSHOT DIFF Query]
   WITH UnionT as (
-    SELECT -1 as cnt, a, b, c FROM T{snapshot='sn1'}
+    SELECT -1 as cnt, a, b, c 
+    FROM T{snapshot='sn2'}
     UNION ALL
-    SELECT 1 as cnt, a, b, c FROM TClone{snapshot='sn3'}
+    SELECT 1 as cnt, a, b, c 
+    FROM TClone{snapshot='sn3'}
   )
   SELECT sum(cnt) as diffCnt, a, b, c FROM UnionT 
   GROUP BY a, b, c
   HAVING sum(cnt) <> 0
-\end{verbatim}
+\end{lstlisting}
+%% \end{verbatim}
 Each row in the result of \texttt{SNAPSHOT DIFF} represents a potential conflict.
 \texttt{SNAPSHOT DIFF} does not require the two snapshots are branched from a 
-common base revision as long as they have the same schema (same column names and types and primary key), 
-however, later in the paper we will see that diff between 
-two snapshots that share a commmon base revision can be efficiently 
-implemented in MatrixOne.  
+common base revision as long as they have the same schema, that is, the same 
+column names and types in the same order, and same primary key definition 
+(if the tables have primary key).  Later in the paper we will see that when  
+two snapshots share a commmon base revision, MatrixOne can perform diff and merge 
+between them very efficiently.
 
-User can perform 3-way merge of merging \texttt{TClone} into \texttt{T}
-using \texttt{T\{snapshot='sn1'\}} as the base revision. 
+User can perform three way merge of from table 
+\texttt{TClone} (currently at snapshot \texttt{sn3}) 
+into \texttt{T} (currently at snapshot \texttt{sn2}) 
+using $T_{sn1}$ as the common base revision. 
 \begin{verbatim}
-  SNAPSHOT MERGE TABLE T FROM TClone 
+  SNAPSHOT MERGE TABLE T FROM TClone{snapshot='sn3'}
     [BASED ON T{snapshot='sn1'}]
     [WHEN CONFLICT FAIL|SKIP|ACCEPT]
 \end{verbatim}
+We allow user to optionally specify a snapshot of \texttt{TClone} 
+but the merge target must be the current version of a table.
 The \texttt{BASED ON} clause is optional and if not specified, MatrixOne will try to 
-compute an implicit base revision.  Merge is different from restoring a snapshot in 
+find an implicit common base revision.  Merge is different from restoring a snapshot in 
 that merge will resolve conflicts found in the result of \texttt{SNAPSHOT DIFF}.
-MatrixOne supports three modes to handle conflicts: \texttt{FAIL}, \texttt{SKIP}, 
+MatrixOne supports three modes to resolve conflicts: \texttt{FAIL}, \texttt{SKIP}, 
 and \texttt{ACCEPT}.  \texttt{FAIL} means that merge will fail if conflicts are found
-and user must resolve all the conflicts manually.  \texttt{SKIP} means that merge will 
-resolve the conflicts by accepting the version in \texttt{T} and \texttt{ACCEPT} will 
-accept the version in \texttt{TClone}.  Version of data in \texttt{T} and \texttt{TClone}
-are computed differently depending on whether \texttt{T} and \texttt{TClone} have primary key.
+and user must resolve all the conflicts manually before merging can proceed.  
+\texttt{SKIP} means that merge will resolve the conflicts by accepting 
+the version in \texttt{T} and \texttt{ACCEPT} will accept the version in \texttt{TClone}.  
+
+Conflicts and resolutions of conflicts between $T$ and $TClone$
+are computed differently depending on whether table \texttt{T} and \texttt{TClone} 
+have primary key.
 First let's consider the case when \texttt{T} has a primary key \texttt{a} and the diff has
-found a conflict on row identified by \texttt{a\_value}.  Consider the following cases:
+found a potential conflict on row identified by \texttt{a\_value}.  
+There are the following cases:
+
 \begin{enumerate}
-\item \texttt{a\_value} does not exist in the common base revision 
-and \texttt{a\_value} does not exist in \texttt{TClone}.
-This means that only \texttt{T} has inserted the row with \texttt{a\_value} 
-after branching from the common base revision.  This is a false conflict and 
-merge will keep the row in \texttt{T}.
+\item \texttt{a\_value} does not exist in the common base revision $T_{sn1}$ 
+and \texttt{a\_value} does not exist in $TClone_{sn3}$.
+This means that only \texttt{T} has inserted the row with key \texttt{a\_value}.
+This is a false conflict and merge will keep the row in $T_{sn2}$.
+
+\item \texttt{a\_value} does not exist in the common base revision $T_{sn1}$
+and \texttt{a\_value} does not exist in $T_{sn2}$.
+This means that only \texttt{TClone} has inserted the row with 
+\texttt{a\_value} after branching from the common base revision.  
+This is a false conflict and 
+merge will keep the row in $TClone_{sn3}$.
 
 \item \texttt{a\_value} does not exist in the common base revision 
-and \texttt{a\_value} does not exist in \texttt{T}.
-This means that only \texttt{TClone} has inserted the row with \texttt{a\_value} 
-after branching from the common base revision.  This is a false conflict and 
-merge will keep the row in \texttt{TClone}.
-
-\item \texttt{a\_value} does not exist in the common base revision and 
-\texttt{a\_value} exists in both \texttt{T} and \texttt{TClone}.  
+$T_{sn1}$ and 
+\texttt{a\_value} exists in both $T_{sn2}$ and $TClone_{sn3}$.
 This means both \texttt{T} and \texttt{TClone} have inserted the row 
-with \texttt{a\_value} but with different values.  \texttt{SKIP} will 
-use the version in \texttt{T}, and \texttt{ACCEPT} will use the 
-version in \texttt{TClone}, and \texttt{FAIL} will fail the merge.
+with key \texttt{a\_value} but with different values.  
+\texttt{SKIP} will use the version in \texttt{T}, 
+\texttt{ACCEPT} will use the version in \texttt{TClone}
+, and \texttt{FAIL} will fail the merge.
 
-\item \texttt{a\_value} exists in the common base revision and has not been deleted or updated
-in \texttt{T}. This means only \texttt{TClone} has deleted or updated 
+\item \texttt{a\_value} exists in the common base revision $T_{sn1}$ 
+and in $TClone_{sn2}$, and the values of all columns of the row 
+are the same.  This means this row is not changed in table 
+\texttt{T} and \texttt{TClone} has deleted or updated 
 this row.  This is a false conflict and merge will perform the 
-same operation as \texttt{TClone}.
+same operation as in \texttt{TClone}.
 
-\item \texttt{a\_value} exists in the common base revision and has not been deleted or updated
-in \texttt{TClone}. This means only \texttt{T} has deleted or updated 
+\item \texttt{a\_value} exists in the common base revision $T_{sn1}$ 
+and in $TClone_{sn3}$, and the values of all columns of the row 
+are the same. This means only \texttt{T} has deleted or updated 
 this row.  This is a false conflict and merge will perform the 
-same operation as \texttt{T}.
+same operation as in \texttt{T}.
 
-\item \texttt{a\_value} exists in the common base revision and has been deleted or updated
-in both \texttt{T} and \texttt{TClone}.  This is a true conflict and 
-\texttt{SKIP} will use the version (which could be a deleted row) in \texttt{T} 
-and \texttt{ACCEPT} will use the version in \texttt{TClone}.  \texttt{FAIL} 
-will fail the merge.
+\item \texttt{a\_value} exists in the common base revision $T_{sn1}$
+and has been deleted or updated in both $T_{sn2}$ and $TClone_{sn3}$.  
+This is a true conflict.
+\texttt{SKIP} will use the version (which could be a delete operation) 
+in $T_{sn2}$, \texttt{ACCEPT} will use the version in $TClone_{sn3}$
+, and \texttt{FAIL} will fail the merge.
 \end{enumerate}
-When \texttt{T} has no primary key, for each row that is found by \texttt{SNAPSHOT DIFF}, 
-there may be multiple rows with same values in all columns in the common base revision, \texttt{T},
-and \texttt{TClone}.  We use $N_0$, $N_T$, and $N_{TClone}$ to denote the number of such rows 
-in the common base revision, \texttt{T}, \texttt{T}, and \texttt{TClone} respectively.
 
-Let $\delta_T = N_T - N_0$ and $\delta_{TClone} = N_{TClone} - N_0$, we consider the following cases:
+When table \texttt{T} does not have a primary key, for each row that 
+is found by \texttt{SNAPSHOT DIFF}, there may be multiple rows with 
+same values in all columns in the common base revision $T_{sn1}$, 
+$T_{sn2}$, and $TClone_{sn3}$.  
+We use $N_{sn1}$, $N_{sn2}$, and $N_{sn3}$ to denote the number of 
+such rows.  Let $\delta_T = N_{sn2} - N_{sn1}$ 
+and $\delta_{TClone} = N_{sn3} - N_{sn1}$, we consider the following cases:
 \begin{enumerate}
 \item $\delta_T = 0$, this is a false conflit and 
 merge keep $N_{TClone}$ such rows in the merge result.
 \item $\delta_{TClone} = 0$, this is a false conflict and 
 merge keep $N_{TClone}$ such rows in the merge result.
-\item $\delta_T \neq 0$ and $\delta_{TClone} \neq 0$, in this case, \texttt{SKIP}
-will keep $N_T$ rows, \texttt{ACCEPT} will keep $N_{TClone}$ rows, and 
-\texttt{FAIL} will fail the merge.
+\item $\delta_T \neq 0$ and $\delta_{TClone} \neq 0$, we consider this
+case to be a true conflict. \texttt{SKIP}
+will keep $N_{sn2}$ rows, \texttt{ACCEPT} will keep $N_{sn3}$ rows
+, and \texttt{FAIL} will fail the merge.
 \end{enumerate}
+MatrixOne considiers case 3 to be a true conflict to avoid
+accidental loss of work.
 
 \section{Snapshot system of MatrixOne}
+MatrixOne implements data version control using its snapshot system.
+In this section, we will first briefly explain the architecture of MaxtrixOne
+database, storage and transaction management system,
+then explain how the snapshot system works.
 
-Data version control is implemented using snapshot system in MatrixOne.
-To understand how snapshot system works, we need first to explain 
-the storage and transaction management system of MatrixOne.  MatrixOne 
-is a cloud native, distributed, database system that supports both transactional
-and analytical workloads (HTAP).  A MatrixOne database system has three 
-kind of nodes, 
+MatrixOne is a cloud native, distributed database system that supports 
+both transactional and analytical workloads (HTAP).  A MatrixOne database 
+system has three kinds of nodes, 
 \begin{description}
 \item[LogService] forms a Raft group and is responsible for the storing the write ahead log (WAL) 
 of the database system.  A MatrixOne database system usually has 3 to 5 LogService nodes.
 \item[TN] is the transaction decision node which decides if a transaction can commit and 
-seqences transaction logs.  TN node is stateless and can be recovered in seconds.  A MatrixOne 
-database system usually has only one TN node but if necessary, TN can failover to a hot standby. 
-\item[CN] is the compute nodes that executes queries.  A MatrixOne database can have unlimited
-number of CN nodes.
+seqences committed transaction logs.  TN also acts as a hub of pub/sub system of WAL, streaming
+WAL records of a table to CNs that have subscribed to the table.  TN node is stateless and can be recovered in seconds.  
+A MatrixOne database system usually has only one TN node but if necessary, TN can failover 
+to a hot standby. 
+\item[CN] is the compute nodes that executes SQL queries.  A MatrixOne database can have unlimited
+number of CN nodes.  A single SQL query may be executed on multiple CN nodes in parallel but 
+simple queries like insert or update a few rows, are usually executed on one CN node.
 \end{description}
+
 \begin{figure}[h]
   \centering
   \includegraphics[width=\linewidth]{m1a}
@@ -282,99 +359,149 @@ number of CN nodes.
   \Description{MatrixOne Database Architecture}
 \end{figure}
 
-MatrixOne stores table in objects of an object storage system such as S3.  
-Each object contains a few row groups and each row group uses column store format to store 
-the data.  Objects of a table forms a LSM tree, ordered by the primary keys 
-or clustering keys with an uniquifier.  
-Once written to object storage, the data is immutable.  
-To delete a row, a tombstone record that 
-contains the primary key (or clustering key plus uniquifier) and the physical rowid of 
-deleted row is written to a separate object.
-A directory structure stores the metadata of objects of a table.  At any timestamp, this
-directory structure corresponds to a snapshot of the table.
+MatrixOne stores data of a table in an object storage system such as S3 \cite{S3}.  
+Each object contains a few row groups and each row group stores many rows 
+using column store format as described in \cite{ColumnStore}.  
+Once written to object storage, the object is immutable.  
+Objects of a table forms a LSM tree \cite{LSMTree}, 
+ordered by the primary keys or clustering keys with an uniquifier.  
+Each row has a physical rowid that consists of the name of the object 
+and the position of the row in the object.
+To delete a row, a tombstone record that contains the primary key 
+(or clustering key plus uniquifier) and the physical rowid
+of deleted row is written to a separate object.
+A directory structure stores the metadata of objects of a table.  
+At any timestamp, this directory structure corresponds 
+to a snapshot of the table.
 
-A transaction begins execution in a CN node.  The transaction sees a consistent snapshot
-of the database and stores all modifications in its own workspace.  When the data in the
-workpsace grows beyond a threshold, the transaction writes the data to object storage
-and only stores the metadata of the written objects in the workspace.  When it is time to 
-commit the transaction, CN write the workspace to DN.  DN commits the transaction by 
-writing WAL to LogService.  If the transaction only modifies a few rows, DN will write the 
-modifications to an in memory object without writing object storage.  Rows in the in-memory
-object have a timestamp and DN can only append, but not modify rows in the in-memory 
-object.  When enough rows are accumulated or a certain time has passed, DN will close 
+MatrixOne uses MVCC conceptually similar to that of 
+PostgreSQL database \cite{PostgreSQL}.  
+All transactions begin execution in a CN node.  When a transaction need to 
+read or write a table, CN registers a subscription to the table to TN and
+will receive up to date WAL records of the table.  Transactions in one CN
+share the same subscription to the table and the subscription may be kept
+alive for a while for immediate reuse by another transaction.
+Each transaction sees a consistent snapshot of the database and stores 
+all modifications in its own transaction workspace.  
+When the data in the workpsace grows beyond a threshold, CN 
+writes the data to object storage and only stores the metadata of the 
+written objects in the workspace.  When it is time to 
+commit the transaction, CN write the workspace to DN.  
+DN commits the transaction by writing WAL to LogService.  
+Commited WAL recordes are streamed to all CNs that have 
+subscribed to the table.
+If a transaction only modifies a few rows, DN will write the 
+modifications to an in memory object without writing object storage.  
+Rows in the in-memory object have a timestamp and DN can only 
+append, but not modify rows in the in-memory object.  When enough 
+rows are accumulated or a certain time has passed, DN will close 
 this in memory object and write it to the object storage.  
 
-From the above description we can see that a snapshot of a table is simply the directory 
-structure of metadata of all objects (both DN in memory objects and on storage objects)
-of the table.  Reading of a timestamp-based snapshot is implemented by simply filtering 
-objects using the timestamp stored in metadata of objects.  For a named snapshot, MatrixOne
-force a flush of the in memory objects of the table.  The sysmem stores the directory 
-structure of metadata of objects and does necessary bookkeeping to associate the name 
-of the snapshot with the directory structure.
+Each CN has a local cache of S3 objects.  The cache implemenation 
+is extemely simple due to the immutable nature of objects.  Each CN
+also rebuild a copy of the in memory object by reading
+and applying the WAL records from the subscription of the table.
 
-Like a typical log-structured storage system, there may be a compaction
-or garbage collection process to compact objects.  The garbage collection process
-understands the snapshot system and will not delete objects that are referenced 
-by a snapshot.
+A snapshot of a table is simply the directory structure of 
+the metadata of all objects (both in memory objects and 
+on storage objects) of the table.  Reading of a timestamp-based 
+snapshot is implemented by reading objects in the directory 
+structure.  Reader need to filtering rows stored in the 
+open, in memory objects using timestamp as MVCC requires.
+
+To save a named snapshot, MatrixOne force a flush of the 
+in memory objects of the table.  The sysmem stores the directory 
+structure of metadata of objects and does necessary bookkeeping 
+to associate the name of the snapshot with the directory structure.
+
+Like a typical log-structured storage 
+system \cite{LSMTree}\cite{LSFS}, there may 
+be background compaction and garbage collection processes
+to compact objects and reclaim storage space.  The garbage 
+collection process understands the snapshot system and will 
+not delete objects that are referenced by a snapshot.
 
 \section{Version Control Operations}
-With the snapshot system in MatrixOne, cloning and restoring a table is relatively 
-easy. Clone a table from a snapshot (maybe of another table) is implemented by copying 
-the directory structure of metadata of the snapshot. Restoring a table from a 
-snapshotis simply setting current state of the table to the snapshot.
+With the snapshot system in MatrixOne, cloning and restoring a table 
+is relatively easy. Clone a table from a snapshot (maybe of another table) 
+is implemented by copying the directory structure of metadata of 
+the snapshot. Restoring a table from a snapshotis simply setting 
+current state of the table to the snapshot.
 
-Consider table \texttt{T} and a cloned table \texttt{TClone} that share a 
-common base revision \texttt{sn1}.  After creating \texttt{TClone}, user modified 
-data in both \texttt{T} and \texttt{TClone} and the two tables have progressed 
-independently to different snapshots \texttt{sn2} and \texttt{sn3}.  We use 
-$\Delta_{sn2}$ to denote the set of objects that in \texttt{sn2} but not in \texttt{sn1}
-and similarly, $\Delta_{sn3}$ to denote the set of objects that in \texttt{sn3} but 
-not in \texttt{sn1}.
+Next we consider the diff and merge operations.  
+Consider workflow on table \texttt{T} and \texttt{TClone} in Listing 
+\ref{lst:wf}.   After creating \texttt{TClone}, user modified 
+data in both \texttt{T} and \texttt{TClone} and the two tables 
+have progressed independently to different snapshots 
+\texttt{sn2} and \texttt{sn3}.  We use $\Delta_{sn2}$ to denote 
+the set difference of objects that in snapshot $T_{sn2}$ and in $T_{sn1}$. 
+Similarly, $\Delta_{sn3}$ denotes the set difference of objects that of
+$T_{sn3}$ and in $T_{sn1}$.
 
 \subsection{Diff}
-To find \texttt{SNAPSHOT DIFF} result of \texttt{sn2} and \texttt{sn3}, we only need to
-read the objects in $\Delta_{sn2}$ and $\Delta_{sn3}$.  
+To find \texttt{SNAPSHOT DIFF} of $T_{sn2}$ and $TClone_{sn3}$, 
+we only need to read the objects in $\Delta_{sn2}$ and $\Delta_{sn3}$.  
 If table \texttt{T} has a primary key \texttt{a},
-all operations on one primary key in $\Delta_{sn2}$ can be collapsed into one logical operation; 
-a delete , an insert or an update (physically two operations, a delete followed by an insert).
-Note that in this case, the deletion is always performed on a row in the common base revision.
-This collapsing is the same as applying tombstone in 
-an ordinary table scan on the LSM tree except that we need to output the deletion of a 
-row in the common base revision.  Note that we need to give a different sign (+/-) to 
-the \texttt{cnt} of each row depending on whether it is deleted, or inserted. 
-We perform the same scanning and collapsing operation on $\Delta_{sn3}$.  
-Next we perform a special join to find the differences of the two multi-sets.
-Newly inserted or updated rows that have the same values in all columns, and
-deletions on the same row in the common base revision should be cancelled.  
-If there are deletions left in the join result, we perform a lookup (another join with
-common base revision) to find out the values of all columns.
-If table \texttt{T} has no primary key, we perform the same join to cancel out 
-inserted or updated rows with the same values in all columns and deletions on the same 
-physical row (the tombstone contains uniquifier and physical rowid) in the common 
-base revision.  We find out values of all columns of deleted rows using physical rowid. 
-A hash aggregation is then used to find out the \texttt{diffCnt} of each row.
-\subsection{Three Way Merge}
+all operations on one primary key in $\Delta_{sn2}$ can be collapsed 
+into one logical operation; a delete from $T_{sn1}$, an insert to $T_{sn2}$, 
+or an update (two physical operations, a delete followed by an insert).
+Note that in this case, the deletion is always performed on a row in 
+the common base revision $T_{sn1}$.  This collapsing is the same as 
+applying tombstone in an ordinary table scan on the LSM tree except 
+that we need to output the deletion of a row from the common base 
+revision $T_{sn1}$.  Note that scanning of $\Delta_{sn2}$ is different
+from the table scan on $T_{sn2}$ in Listing \ref{lst:diff}, because we 
+need to give a different sign (+/-) to the \texttt{cnt} of each row 
+depending on whether it is deleted or inserted.  Also, for deletes, 
+$\Delta_{sn2}$ only scan out the tombstone record.  Non primary key
+columns are filled with nulls. We perform the same 
+scanning and collapsing operation on $\Delta_{sn3}$.  
+
+Next we will perform a special aggregation to find the differences
+of two multi-sets.  Operations of $\Delta_{sn2}$ and $\Delta_{sn3}$ 
+are same if they are deletions on the same row in $T_{sn1}$, or, 
+insertions of rows with the same values in all columns.  Such same 
+operations on both sides will cancel out in the aggregation. 
+If there are deletions left in the aggregation result, we perform 
+a lookup (a join with $T_{sn1}$) to find out the values of all columns
+of the row.
+
+If table \texttt{T} has no primary key, we perform the same aggregation 
+to cancel out inserted rows with the same values in all columns and 
+deletions on the same physical row (the tombstone contains uniquifier 
+and physical rowid) in the common base revision $T_{sn1}$.  
+Then we lookup values of all columns of deleted rows using physical rowid
+and compute the \texttt{diffCnt} as in Listing \ref{lst:diff}.
+
+\subsection{Three Way Merge} \label{sec:threewaymerge}
 Three way merge from \texttt{TClone} to \texttt{T} is implemented by first 
-performing the join described in the \texttt{SNAPSHOT DIFF} operation.  
+performing the aggregation described in the \texttt{SNAPSHOT DIFF} operation.  
 Note that scanning and collapsing operations described above actually
-carries more information than the \texttt{diffCnt} in the result of \texttt{SNAPSHOT DIFF}.
-We know that a plus one \texttt{diffCnt} whether it comes from a deletion from $\Delta_{sn2}$
-or from an insert from $\Delta_{sn3}$.  
-In the case that \texttt{T} has a primary key, we can use this extra information to tell
-whether a conflict is 
-a false conflict 
+carries more information than the \texttt{diffCnt} in the result of 
+\texttt{SNAPSHOT DIFF}.  We know that a plus one \texttt{diffCnt} 
+whether it comes from a deletion from $\Delta_{sn2}$ or from an insert 
+from $\Delta_{sn3}$.  
+In the case that \texttt{T} has a primary key, we can use this extra 
+information to tell whether a conflict is a false conflict 
 (the primary key appears in only one of $\Delta_{sn2}$ and $\Delta_{sn3}$)
 or a true conflict 
-(if the primary key appears in both both $\Delta_{sn2}$ and $\Delta_{sn3}$)
-.  There is an rare, but interesting case that when one side updated a row 
+(if the primary key appears in both both $\Delta_{sn2}$ and $\Delta_{sn3}$).  
+There is an rare, but interesting case that when one side updated a row 
 in the common base revision to a row with same values in all columns, 
 that is, the row is simply "moved" to a different position.  We do not 
 consider this "move" as a change of data therefore we treat this as a 
-false conflict.  This is the only case that merge will need to read out
-the full deleted row from the common base revision.
+false conflict.  If we do not handle this "move" case, for example,
+if a row is moved from $T_{sn1}$ to $T_{sn2}$ and updated in $T_{sn3}$,
+the \texttt{SKIP} resolution strategy would have treated this as a true
+conflict and would have kept the row in $T_{sn2}$.  This in effect would
+have lost an update in $T_{sn3}$ in the final merge result.
+The move case may happen in the case 6 in section \ref{sec:vcop} 
+and it is the only case that merge will need to read out the full 
+deleted row from the common base revision. 
 
-The same can be said for the case that \texttt{T} has no primary key.
-A conflict is a true conflict only if a row with same values in all columns
+The extra information is also useful when table \texttt{T} does not have
+a primary key.  A potential conflict is a true conflict only if a row 
+with same values in all columns
 appear in both $\Delta_{sn2}$ and $\Delta_{sn3}$.  In this case, merge will 
 need to read out the full deleted row from the common base revision using 
 physical rowid.  Merge will then resolve rows of true conflict as described
@@ -383,7 +510,8 @@ in section \ref{sec:vcop}.
 \subsection{Compact and Garbage Collection}
 MatrixOne will not compact (therefore, will not garbage collect) objects that 
 are referenced by a named snapshot.  However, it is possible for the system to
-schedule a compacting/GC job on \texttt{T} between \texttt{sn1} and \texttt{sn2}, 
+schedule a compacting/GC job on table \texttt{T} between 
+\texttt{sn1} and \texttt{sn2}, 
 or on \texttt{TClone} between \texttt{sn1} and \texttt{sn3}.  MatrixOne performs
 compaction as a transaction of deleting objects and writing new objects, that is,
 move all valid rows from several old objects to one or more new objects.  
@@ -406,7 +534,7 @@ all its snapshots.  In this case the two way merge is computed as a three way
 merge with an empty common base revision.  Even in this case, if most of the 
 data in the two tables share a commmon base revision, diff and merge 
 can be computed much more efficiently than using the SQL query of 
-section \ref{sec:vcop} by simply observing that rows in the shared objects 
+section \ref{sec:vcop} by simply observing that rows in the common objects 
 of the two tables will cancel each other out.
 
 \subsection{Discussion}
@@ -415,12 +543,15 @@ the implementation of version control operations of MatrixOne.
 
 \subsubsection{Three Way Diff}
 MaxtrixOne only supports two way diff at this moment.  Three way diff can
-be implemented efficiently as well by skipping shared objects in common 
-base revision.
-While three way diff is important to decide the "false" conflicts, we believe end 
-user will be more interested in the two way diff result.  Three way 
-comparision is much more useful when we perform merge.  Thus we decided
-not to expose three way diff to reduce operation complexity and confusion.
+be implemented efficiently as well by skipping common objects in $T_{sn1}$, 
+$T_{sn2}$, and $TClone_{sn3}$.  In fact, the "extra information" mentioned 
+in section \ref{sec:threewaymerge} is exactly the information needed in
+three way diff.
+
+While three way diff is important to decide the "false" conflicts and 
+in perform the merge operation, we believe end user will be more 
+interested in the two way diff result.   Thus we decided not to 
+expose three way diff to reduce operation complexity and confusion.
 
 \subsubsection{Revision Lineage}
 MatrixOne keeps track of the revision lineage of two tables that are one 
@@ -428,14 +559,53 @@ branch away from each other.  When a two way merge cannot find a common
 base revision, an empty common base revision is used.  MatrixOne can 
 still optimize the merge by skipping shared objects.  This is differnt 
 from a three way merge that user explicitly specifies the common base revision.
-Without a common base revision, MatrixOne cannot tell whehter a row is newly 
+Without a common base revision, MatrixOne cannot tell whether a row is newly 
 inserted or, updated -- especially, it cannot tell if the row is simply "moved".
 To be safe, MatrixOne can only treat this as a true conflict and ask 
 user to decide how to resolve.
 
 \subsubsection{Conflict Resolution}
+MatrixOne only supports SKIP (accept yours in git merge) and ACCEPT (accept mine)
+modes for conflict resolution.  If user do not want to use these modes, user
+must resolve the conflicts manually.  User must find out all conflicts using
+\texttt{SNAPSHOT DIFF} and then modify data in his own table \texttt{TClone} 
+using SQL.
+MatrixOne considers a row as conflict if both sides of the merge have 
+modified the row, even if the modification are on different, non primary key 
+columns.  We may consider relaxing this rule to allow user to automatically 
+merge such modifications.
 
 \subsubsection{Indices}
+Cloning an table will only clone the table.  It will keep 
+the same schema and primary key definitions.  At this moment, cloning 
+table will not clone secondary indices of the table.  
+Secondary index 
+of MatrixOne is implemented using an auxiliary table
+that consists of the indexed columns and the primary key columns of 
+the original table.  In case of table without primary key, the 
+auxiliary table contains indexed columns and clustering columns 
+and the uniquifier.
+Since the secondary index is just another table, stored and managed as
+LSM tree like user tabloes in MatrixOne, cloning 
+a table with indices can simply clone the auxiliary tables.  
+These auxiliary tables are not used or modified in diff or merge 
+operations and are independently maintained by treating merge as
+ordinary modifications of a table.
+
+\subsubsection{Large Object Types}
+MatrixOne has two kinds of large object types, LOB and datalink.
+The first kind includes TEXT, JSON, BLOB types and these types are 
+stored inside the database.  There are no difference between these 
+LOB types and other data types when we perform diff or merge operations,
+except that they may consume a lot of memory if we hold the full contents
+of these LOBs in the hash table of the join or aggregate operators. 
+MatrixOne can build the hash table using a signature such as SHA256 
+of the LOB and release the memory of the full contents of the LOB.
+The second kind of large object types is the datalink type.  A datalink 
+is basically a URL pointing to an external resource, for example, a 
+file in a network file system or an object in an object storage system 
+like S3.  MatrixOne does not manage changes of the external resource.
+A datalink value is changed only if the URL is changed.
 
 \section{Experimental Results}
 We performed a series of experiments to evaluate the performance of 
@@ -451,7 +621,10 @@ then with primary key \texttt{(l\_orderkey, l\_linenumber).}
 
 TODO: really do the work.
 
-\section{Conclusion}
+\section{Conclusion and Future Work}
+
+TODO: You really want to say something
+
 
 %% \begin{table}
 %%   \caption{Frequency of Special Characters}

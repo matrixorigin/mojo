@@ -1,7 +1,28 @@
 \begin{thebibliography}{10}
 
+\bibitem{S3}
+AWS S3.
+\newblock {https://aws.amazon.com/s3/}
+
 \bibitem{Git}
-Git.
+Git
 \newblock {https://git-scm.com}
 
+\bibitem{PostgreSQL}
+PostgreSQL
+\newblock {https://www.postgresql.org/}
+
+\bibitem{LSMTree}
+Patrick O'Neil, Edward Cheng, Dieter Gawlick, Elizabeth O'Neil.
+The Log-Structured Merge-Tree (LSM-Tree)
+\newblock {Acta Informatica, Vol 33, Issue 4, 1996}
+
+\bibitem{LSFS}
+Mendel Rosenblum, John K. Ousterhout.
+The design and implementation of a log-structured file system.
+\newblock {ACM Transactions on Computer Systems, Vol 10, Issue 1, 1992}
+
+\bibitem{ColumnStore}
+Mike Stonebraker, Daniel J. Abadi, Adam Batkin, et al. C-Store: A Column-oriented DBMS.
+\newblock {Proceedings of the 31st VLDB Conference, 2005}
 \end{thebibliography}
