@@ -137,6 +137,14 @@ table as a file in git, MatrixOne can support all day to day git operations such
 clone/branch, push/pull, diff, merge, revert, on terabytes of data almost 
 instantly.
 
+The data version control system in a relational database system also unlocks
+many AI applications on structured data.  Relational database holds very 
+high quality, high value dataset but often not flexible for data engineers
+to conduct experiments.  MatrixOne allow data engineers to label data, 
+to make hypothetical changes to data, to compare and review these changes,
+to join or aggregate different versions of data with the full power of SQL,
+all without any disruption to existing business applications.
+
 In the rest of this paper, we will first introduce the version control operations
 supported by MatrixOne.  We explain the semantics of these operations and 
 walk through a typical day to day workflow of a data engineer using MatrixOne.
@@ -208,8 +216,8 @@ changes in $T_{sn2}$ to table \texttt{TClone} using
         SNAPSHOT T{snapshot='sn2'}
 \end{verbatim}
 Restore will overwrite all modifications in $TClone_{sn3}$ and completely replace 
-data of \texttt{TClone} with data of $T_{sn2}$.  It is equivalent to 
-\texttt{git reset --hard sn2}.
+data of \texttt{TClone} with data of $T_{sn2}$.  It is equivalent to perform 
+\texttt{git reset --hard sn2} on \texttt{TClone}.
 
 User can diff two snapshots, may or may not be of the same table, using 
 \begin{verbatim}
@@ -235,8 +243,8 @@ is the result of the following SQL query:
 Each row in the result of \texttt{SNAPSHOT DIFF} represents a potential conflict.
 \texttt{SNAPSHOT DIFF} does not require the two snapshots are branched from a 
 common base revision as long as they have the same schema, that is, the same 
-column names and types in the same order, and same primary key definition 
-(if the tables have primary key).  Later in the paper we will see that when  
+column names and types in the same order and same primary key definition 
+if the tables have one.  Later in the paper we will see that when  
 two snapshots share a commmon base revision, MatrixOne can perform diff and merge 
 between them very efficiently.
 
@@ -537,7 +545,7 @@ can be computed much more efficiently than using the SQL query of
 section \ref{sec:vcop} by simply observing that rows in the common objects 
 of the two tables will cancel each other out.
 
-\subsection{Discussion}
+\subsection{Discussion} \label{sec:discussion}
 We discuss some interesting issues and possible future works related to 
 the implementation of version control operations of MatrixOne.
 
@@ -607,6 +615,17 @@ file in a network file system or an object in an object storage system
 like S3.  MatrixOne does not manage changes of the external resource.
 A datalink value is changed only if the URL is changed.
 
+\subsubsection{Schema Change}
+User can make schema changes on a table using \texttt{ALTER TABLE} 
+statement.  Especially, MatrixOne supports \texttt{RESTORE TABLE} 
+to a snapshot that was taken before the schema change.  However, 
+if user alter the schema of a table of a cloned table, MatrixOne
+will not be able to perform diff or merge between the two tables
+because the schema of the two tables are different.  To use data
+version control on such a table, it is generally advised to make 
+schema changes on a table before cloning it. 
+
+
 \section{Experimental Results}
 We performed a series of experiments to evaluate the performance of 
 our version control operations.  We used the TPCH 1TB dataset on one 
@@ -622,8 +641,26 @@ then with primary key \texttt{(l\_orderkey, l\_linenumber).}
 TODO: really do the work.
 
 \section{Conclusion and Future Work}
+MatrixOne has a powerful snapshot system and based on this, we have 
+developed a version control system for data.  We support all common
+data version control operations like clone, tag, diff, merge, 
+revert, on large amount of data.  Team of data engineers can cooperate 
+and work on the same dataset.  They can work on the same table and
+database transactions will handle the concurrency and consistency.
+They can also fork a table, make modifications, and merge the changes 
+back to the original table.   The fork/merge model allows data
+engineers to publish a "complete and clean" revision of a dataset.
+Data engineers are free to experiment, saving intermidiate results
+and reverting/rolling back bad changes without fear of losing data.
+\texttt{SNAPSHOT DIFF} will allow data engineers to conduct 
+data review on changes between two snapshots.  All these operations
+are very efficient in both time and storage space.
 
-TODO: You really want to say something
+Section \ref{sec:discussion} discusses some interesting issues 
+and possible improvements.  Better or smarter conflict 
+resolution strategies is one of the important areas to work on.
+We will continue to work with customers with real world use 
+cases to further improve our version control system.  
 
 
 %% \begin{table}
