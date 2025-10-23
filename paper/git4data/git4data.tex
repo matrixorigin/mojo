@@ -635,13 +635,14 @@ emulate heap storage.
 
 \subsection{Workloads}
 All experiments use the TPCH 1TB \texttt{lineitem} table (approximately
-6 billion rows) stored in S3 and run on a bare-metal server with
-Linux \texttt{5.19.12-1.el8.elrepo.x86\_64}, 64 CPU cores, and 256~GB
-memory; MatrixOne is configured with a 100~GB buffer cache.  After
-loading the data we take a snapshot of \texttt{lineitem} and create two
-branch tables from the snapshot: \texttt{T1} serves as the reference
-branch and \texttt{T2} is the editable branch.  For each primary-key
-configuration we generate three conflict-free update batches by
+6 billion rows) stored on local disks of a bare-metal Linux server
+running \texttt{5.19.12-1.el8.elrepo.x86\_64} with 64 CPU cores and
+256~GB memory; MatrixOne is configured with a 100~GB buffer cache.
+After loading the data we take a snapshot of \texttt{lineitem} and
+create two branch tables from the snapshot: \texttt{T1} serves as the
+reference branch and \texttt{T2} is the editable branch.  For each
+primary-key configuration we generate three conflict-free update batches
+by
 modifying random rows in \texttt{T2} only:
 
 \begin{itemize}
