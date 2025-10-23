@@ -627,18 +627,221 @@ schema changes on a table before cloning it.
 
 
 \section{Experimental Results}
-We performed a series of experiments to evaluate the performance of 
-our version control operations.  We used the TPCH 1TB dataset on one 
-c6gd.16xlarge (64 arm cores, 128GB memory) instance on AWS and tables 
-are stored in S3.  We load the lineitem table twice into two tables 
-\texttt{L1} and \texttt{T2}.  WE created a clone \texttt{L1Clone} 
-from \texttt{L1}, and performed some modifications to 1000 rows in 
-\texttt{L1Clone}, and later measured the time taken by diff and merge.
+We evaluate MatrixOne's snapshot-based branching by measuring
+\texttt{SNAPSHOT DIFF} and \texttt{SNAPSHOT MERGE} latencies on large
+analytical tables.  Two experimental groups are considered: one where
+the table keeps its primary key and one where the key is removed to
+emulate heap storage.
 
-The experiments were performed twice, first without primary key and
-then with primary key \texttt{(l\_orderkey, l\_linenumber).}
+\subsection{Workloads}
+All experiments use the TPCH 1TB \texttt{lineitem} table (approximately
+6 billion rows) stored in S3 and run on a bare-metal server with
+Linux \texttt{5.19.12-1.el8.elrepo.x86\_64}, 64 CPU cores, and 256~GB
+memory; MatrixOne is configured with a 100~GB buffer cache.  After
+loading the data we take a snapshot of \texttt{lineitem} and create two
+branch tables from the snapshot: \texttt{T1} serves as the reference
+branch and \texttt{T2} is the editable branch.  For each primary-key
+configuration we generate three conflict-free update batches by
+modifying random rows in \texttt{T2} only:
 
-TODO: really do the work.
+\begin{itemize}
+\item \textbf{C1}: update 1{,}000 rows.
+\item \textbf{C2}: update 100{,}000 rows.
+\item \textbf{C3}: update 10{,}000{,}000 rows.
+\end{itemize}
+
+The base table \texttt{T1} remains untouched so that diff and merge see
+only one sided changes.
+
+\subsection{Methodology}
+For each batch size and primary-key state we execute the following
+steps on \texttt{T1} (reference) and \texttt{T2} (editable):
+\begin{enumerate}
+\item Apply the update script to \texttt{T2}.
+\item Record the latency of \texttt{SNAPSHOT DIFF
+      T2\{snapshot='sn\_c'\} AND T1\{snapshot='sn\_b'\}}.
+\item Record the latency of \texttt{SNAPSHOT MERGE TABLE T1 FROM
+      T2\{snapshot='sn\_c'\}}.
+\item Restore both tables to the common snapshot and repeat.
+\end{enumerate}
+Each configuration is repeated five times; we report the mean wall-clock
+time while retaining per-run samples for later statistical analysis.
+Caches are warmed once before the measurement loop to reduce start-up
+variance.  In the notation above, \texttt{sn\_b} denotes the base
+snapshot shared by both tables and \texttt{sn\_c} denotes the clone
+snapshot captured after applying the updates.  Unless noted otherwise,
+reported latencies exclude the first (cold) run so that averages reflect
+steady-state performance; the initial measurements are retained
+separately to illustrate cold-start costs.
+
+\subsection{Reference SQL Implementations}
+For completeness we list the SQL equivalents used to verify the
+semantics of diff and merge, although only the native snapshot
+operations are timed.  Random update batches are derived using a helper
+table that samples keys with a \texttt{CRC32} predicate scaled to the
+desired cardinality $C_x$:
+\begin{lstlisting}[label=lst:random-keys,caption=Sampling Keys for Update Batches]
+CREATE TABLE rnd_keys (
+  l_orderkey BIGINT,
+  l_linenumber INT,
+  PRIMARY KEY (l_orderkey, l_linenumber)
+);
+
+INSERT INTO rnd_keys
+SELECT l_orderkey, l_linenumber
+FROM lineitem
+WHERE CRC32(CONCAT(l_orderkey, ':', l_linenumber))
+      < (Cx / 6e9) * 2^32
+LIMIT Cx;
+
+UPDATE T2 AS l
+JOIN (
+  SELECT l_orderkey, l_linenumber
+  FROM rnd_keys
+  ORDER BY l_orderkey, l_linenumber
+  LIMIT Cx
+) AS b
+ON l.l_orderkey = b.l_orderkey
+AND l.l_linenumber = b.l_linenumber
+SET l.l_discount = l.l_discount + 0.01;
+\end{lstlisting}
+The \texttt{lineitem} composite key $(l\_orderkey,l\_linenumber)$ is
+close to uniform, so the hash filter yields a nearly uniform sample
+without full-table sorting.
+\begin{lstlisting}[label=lst:diff-sql,caption=SQL Reference for Diff]
+WITH union_t AS (
+  SELECT -1 AS cnt, col_1, col_2, col_3
+  FROM T1{snapshot='sn_b'}
+  UNION ALL
+  SELECT 1 AS cnt, col_1, col_2, col_3
+  FROM T2{snapshot='sn_c'}
+)
+SELECT SUM(cnt) AS diff_cnt, col_1, col_2, col_3
+FROM union_t
+GROUP BY col_1, col_2, col_3
+HAVING SUM(cnt) <> 0;
+\end{lstlisting}
+\begin{lstlisting}[label=lst:merge-sql,caption=SQL Reference for Merge]
+DELETE FROM T1 AS tgt
+WHERE tgt.pk IN (
+  SELECT b.pk
+  FROM T1{snapshot='sn_b'} AS b
+  LEFT JOIN T2{snapshot='sn_c'} AS c USING (pk)
+  WHERE c.pk IS NULL
+);
+
+INSERT INTO T1(pk, col_1, col_2, col_3)
+SELECT c.pk, c.col_1, c.col_2, c.col_3
+FROM T2{snapshot='sn_c'} AS c
+LEFT JOIN T1{snapshot='sn_b'} AS b USING (pk)
+WHERE b.pk IS NULL
+   OR (c.col_1, c.col_2, c.col_3)
+      <> (b.col_1, b.col_2, b.col_3);
+\end{lstlisting}
+For heap tables the same pattern applies with surrogate row identifiers
+replacing primary keys.
+
+\subsection{Summary of Results}
+Tables~\ref{tab:latency-nopk} and \ref{tab:latency-pk} report average
+steady-state latencies (seconds, excluding the cold run) for each
+scenario, rounded to two decimal places.  Tables~\ref{tab:nopk-runs} and
+\ref{tab:pk-runs} list the full per-run measurements to highlight the
+cold-start effect.  All
+diff entries refer to \texttt{SNAPSHOT DIFF T2} against \texttt{T1}, and
+merge entries refer to \texttt{SNAPSHOT MERGE TABLE T1 FROM T2}.
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), No Primary Key}
+  \label{tab:latency-nopk}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.24 & 0.85 & 26.94 \\
+    Merge & 0.53 & 1.74 & 84.47 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), With Primary Key}
+  \label{tab:latency-pk}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.07 & 0.46 & 53.05 \\
+    Merge & 0.50 & 1.76 & 150.04 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{No Primary Key: Per-run Latencies (s)}
+  \label{tab:nopk-runs}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.301 & 0.235 & 0.240 & 0.255 & 0.238 \\
+    Diff C2  & 1.144 & 0.864 & 0.882 & 0.849 & 0.796 \\
+    Diff C3  & 26.464 & 26.903 & 27.059 & 27.362 & 26.421 \\
+    Merge C1 & 0.566 & 0.494 & 0.451 & 0.567 & 0.605 \\
+    Merge C2 & 1.443 & 1.775 & 1.784 & 1.712 & 1.677 \\
+    Merge C3 & 84.404 & 84.689 & 84.951 & 84.827 & 83.426 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{With Primary Key: Per-run Latencies (s)}
+  \label{tab:pk-runs}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.350 & 0.066 & 0.072 & 0.073 & 0.072 \\
+    Diff C2  & 0.505 & 0.511 & 0.473 & 0.448 & 0.404 \\
+    Diff C3  & 61.710 & 54.125 & 51.014 & 51.934 & 55.141 \\
+    Merge C1 & 0.501 & 0.236 & 0.576 & 0.587 & 0.621 \\
+    Merge C2 & 1.499 & 1.751 & 1.748 & 1.712 & 1.829 \\
+    Merge C3 & 161.249 & 153.668 & 151.312 & 149.762 & 145.412 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Discussion}
+Merge latency is consistently higher than diff because each merge
+comprises a diff step between \texttt{T2} and \texttt{T1} followed by
+updates applied to \texttt{T1}.  The relative performance between the
+primary-key and heap configurations is shaped by MatrixOne's storage
+layout.  Data objects and tombstone objects are stored separately, so an
+update yields tombstones that only contain the primary key (or fake
+primary key).  Reconstructing the full row therefore requires a lookup
+into the base table.  In the primary-key setup the lookup must probe a
+composite key; because MatrixOne currently does not support predicates
+like \texttt{(pk1, pk2) IN ((x1, x2), (y1, y2))}, the execution rewrites
+the lookup as a join on \texttt{VALUES}, which is more expensive than
+the direct fake-key lookup used by the heap table.  The subsequent merge
+stage performs similar lookups to update \texttt{T1}, and the primary-key
+case needs to deduplicate incoming rows before applying updates, further
+slowing the write phase.
+
+On the other hand, diff on the heap table must compute full-row hashes
+because no key is available, whereas the primary-key case hashes only
+the key.  When the change set is small (C1) the hashing overhead
+dominates, so the primary-key configuration is faster.  As the modified
+portion grows, the cost of key lookups and deduplication takes over and
+the heap table becomes faster despite the heavier hashing.
+
+These experiments capture the behavior on a single MatrixOne node.
+MatrixOne is a distributed system, and future work will parallelize
+diff/merge across multiple compute nodes to further reduce end-to-end
+latency.
 
 \section{Conclusion and Future Work}
 MatrixOne has a powerful snapshot system and based on this, we have 
