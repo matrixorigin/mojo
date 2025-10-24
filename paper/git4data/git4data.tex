@@ -633,16 +633,25 @@ analytical tables.  Two experimental groups are considered: one where
 the table keeps its primary key and one where the key is removed to
 emulate heap storage.
 
-\subsection{Workloads}
-All experiments use the TPCH 1TB \texttt{lineitem} table (approximately
-6 billion rows) stored on local disks of a bare-metal Linux server
-running \texttt{5.19.12-1.el8.elrepo.x86\_64} with 64 CPU cores and
-256~GB memory; MatrixOne is configured with a 100~GB buffer cache.
-After loading the data we take a snapshot of \texttt{lineitem} and
-create two branch tables from the snapshot: \texttt{T1} serves as the
-reference branch and \texttt{T2} is the editable branch.  For each
-primary-key configuration we generate three conflict-free update batches
-by
+\subsection{Experimental Setup}
+Both experiments run on the same bare-metal Linux server
+(\texttt{5.19.12-1.el8.elrepo.x86\_64}, 64 CPU cores, 256~GB memory) with
+a 100~GB MatrixOne buffer cache and all data stored on local disks.  We
+load the TPCH \texttt{lineitem} table, take a snapshot, and clone two
+tables: \texttt{T1} (reference) and \texttt{T2} (editable).  Branch
+operations refer to MatrixOne's native \texttt{SNAPSHOT DIFF} and
+\texttt{SNAPSHOT MERGE}.
+
+Experiment~1 uses the 1\,TB \texttt{lineitem} dataset (approximately
+6 billion rows) and evaluates snapshot diff/merge with and without
+primary keys.  Experiment~2 scales the table to 100\,GB (about 600
+million rows), keeps the primary key, and compares snapshot diff/merge
+against SQL implementations.  The two workloads differ in update
+locality: Experiment~1 samples from roughly a 5\% band of the hash
+space, and Experiment~2 widens the band to about 10\% so that more data
+objects must be touched per batch.
+
+For each setup we generate three conflict-free update batches by
 modifying random rows in \texttt{T2} only:
 
 \begin{itemize}
@@ -655,8 +664,8 @@ The base table \texttt{T1} remains untouched so that diff and merge see
 only one sided changes.
 
 \subsection{Methodology}
-For each batch size and primary-key state we execute the following
-steps on \texttt{T1} (reference) and \texttt{T2} (editable):
+Both experiments follow the same execution procedure on \texttt{T1}
+(reference) and \texttt{T2} (editable):
 \begin{enumerate}
 \item Apply the update script to \texttt{T2}.
 \item Record the latency of \texttt{SNAPSHOT DIFF
@@ -709,6 +718,11 @@ SET l.l_discount = l.l_discount + 0.01;
 The \texttt{lineitem} composite key $(l\_orderkey,l\_linenumber)$ is
 close to uniform, so the hash filter yields a nearly uniform sample
 without full-table sorting.
+By tuning the cutoff in the predicate, we can further restrict candidate
+keys to a fraction of the table; the 1\,TB study samples from roughly
+the top 5\% of the hash space, whereas the 100\,GB study widens the band
+to about 10\% before drawing $C_x$ rows.  This difference changes how
+many data objects MatrixOne must load during diff/merge.
 \begin{lstlisting}[label=lst:diff-sql,caption=SQL Reference for Diff]
 WITH union_t AS (
   SELECT -1 AS cnt, col_1, col_2, col_3
@@ -742,14 +756,15 @@ WHERE b.pk IS NULL
 For heap tables the same pattern applies with surrogate row identifiers
 replacing primary keys.
 
-\subsection{Summary of Results}
-Tables~\ref{tab:latency-nopk} and \ref{tab:latency-pk} report average
-steady-state latencies (seconds, excluding the cold run) for each
-scenario, rounded to two decimal places.  Tables~\ref{tab:nopk-runs} and
-\ref{tab:pk-runs} list the full per-run measurements to highlight the
-cold-start effect.  All
-diff entries refer to \texttt{SNAPSHOT DIFF T2} against \texttt{T1}, and
-merge entries refer to \texttt{SNAPSHOT MERGE TABLE T1 FROM T2}.
+\subsection{Experiment 1: Snapshot Diff/Merge on 1\,TB}
+Tables~\ref{tab:latency-nopk} and \ref{tab:latency-pk} report the
+steady-state latency (seconds, excluding the cold run) for MatrixOne
+snapshot diff/merge (branch operations) on the 1\,TB dataset, with and
+without primary keys.  The corresponding per-run measurements appear in
+Tables~\ref{tab:nopk-runs}--\ref{tab:pk-runs} to highlight cold-start
+effects.  All diff entries refer to \texttt{SNAPSHOT DIFF T2} against
+\texttt{T1}, and merge entries refer to \texttt{SNAPSHOT MERGE TABLE T1
+FROM T2}.
 
 \begin{table}[h]
   \centering
@@ -815,6 +830,76 @@ merge entries refer to \texttt{SNAPSHOT MERGE TABLE T1 FROM T2}.
   \end{tabular}
 \end{table}
 
+\subsection{Experiment 1 Discussion}
+Primary keys lower diff latency for the smallest batch (0.24\,s vs.
+0.07\,s) because the heap configuration must hash full rows.  As the
+modified portion grows, the cost of backfilling values from tombstones
+and deduplicating updates outweighs the hashing advantage, so heap
+tables become faster for medium and large batches.  Merge times are
+higher than diff times because each merge performs the diff and then
+applies updates to \texttt{T1}.
+
+\subsection{Experiment 2: Snapshot Diff/Merge vs.\ SQL on 100\,GB}
+To compare MatrixOne snapshot diff/merge (branch operations) with SQL
+emulation, we repeat the tests on the same hardware using the TPCH
+\texttt{lineitem} table scaled to 100\,GB (approximately 600 million
+rows) with primary keys enabled.  The sampling predicate widens the
+candidate band to roughly 10\% of the hash space, so MatrixOne must load
+more data blocks before applying diff/merge.  Each scenario is executed
+five times; averages below exclude the first run to remove cold-start
+effects.
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), Branch vs.\ SQL (PK, 100\,GB)}
+  \label{tab:branch-sql-avg}
+  \begin{tabular}{lcccccc}
+    \toprule
+    & \multicolumn{3}{c}{Branch Operations} & \multicolumn{3}{c}{SQL Emulation} \\
+    \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
+    Merge & 0.23 & 6.92 & 125.33 & 548.25 & 500.00 & 510.00 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Branch Operations (PK, 100\,GB): Per-run Latencies (s)}
+  \label{tab:branch-sql-runs-branch}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.08 & 0.07 & 0.11 & 0.08 & 0.07 \\
+    Diff C2  & 1.27 & 1.59 & 1.34 & 1.58 & 1.30 \\
+    Diff C3  & 27.93 & 25.75 & 23.70 & 30.40 & 28.44 \\
+    Merge C1 & 0.20 & 0.24 & 0.25 & 0.22 & 0.21 \\
+    Merge C2 & 6.89 & 7.04 & 6.99 & 6.88 & 6.77 \\
+    Merge C3 & 158.00 & 130.66 & 124.31 & 123.89 & 122.44 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{SQL Emulation (PK, 100\,GB): Per-run Latencies (min:sec)}
+  \label{tab:branch-sql-runs-sql}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 10:55 & 11:11 & 11:29 & 11:50 & 12:08 \\
+    Diff C2  & 09:26 & 09:47 & 10:03 & 10:18 & 10:42 \\
+    Diff C3  & 09:09 & 10:57 & 12:07 & 11:12 & 10:48 \\
+    Merge C1 & 08:43 & 08:51 & 09:02 & 09:13 & 09:27 \\
+    Merge C2 & 07:51 & 08:07 & 08:15 & 08:26 & 08:32 \\
+    Merge C3 & 08:34 & 08:20 & 09:04 & 08:41 & 07:55 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 \subsection{Discussion}
 Merge latency is consistently higher than diff because each merge
 comprises a diff step between \texttt{T2} and \texttt{T1} followed by
@@ -843,6 +928,23 @@ These experiments capture the behavior on a single MatrixOne node.
 MatrixOne is a distributed system, and future work will parallelize
 diff/merge across multiple compute nodes to further reduce end-to-end
 latency.
+
+On the 100\,GB workload, the SQL implementations must join and group the
+entire table to identify differences, so their latency stays near the
+full-table scan cost (8--12 minutes) regardless of the change-set size.
+SQL merges are slightly faster than SQL diffs because they perform
+key-based updates after identifying candidate rows, whereas the diff
+path aggregates all columns.  Native branch operations remain two to
+three orders of magnitude faster on small and medium batches; the gap
+narrows as updates approach the scale of a full scan, where both methods
+are bound by the cost of reading most of the table.
+
+Because the second experiment samples keys from a wider 10\% band, even
+the smaller change sets touch many more data blocks than the 1\,TB
+workload (5\% band).  Branch-operation latencies for C1/C2 are therefore
+higher in Experiment~2 despite the smaller base table, underscoring how
+MatrixOne's object layout couples cost to the breadth of modified key
+ranges.
 
 \section{Conclusion and Future Work}
 MatrixOne has a powerful snapshot system and based on this, we have 
