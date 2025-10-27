@@ -3,6 +3,7 @@
 \usepackage[english]{babel}
 \usepackage{graphicx}
 \usepackage{svg}
+\usepackage{tikz}
 
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily,
@@ -626,19 +627,405 @@ version control on such a table, it is generally advised to make
 schema changes on a table before cloning it. 
 
 
-\section{Experimental Results}
-We performed a series of experiments to evaluate the performance of 
-our version control operations.  We used the TPCH 1TB dataset on one 
-c6gd.16xlarge (64 arm cores, 128GB memory) instance on AWS and tables 
-are stored in S3.  We load the lineitem table twice into two tables 
-\texttt{L1} and \texttt{T2}.  WE created a clone \texttt{L1Clone} 
-from \texttt{L1}, and performed some modifications to 1000 rows in 
-\texttt{L1Clone}, and later measured the time taken by diff and merge.
+We evaluate MatrixOne's snapshot-based branching across three workloads: 1\,TB with/without primary keys, 100\,GB with SQL comparisons, and a 100\,GB collaborative test with four concurrent users.
+We evaluate MatrixOne's snapshot-based branching by measuring
+\texttt{SNAPSHOT DIFF} and \texttt{SNAPSHOT MERGE} latencies on large
+analytical tables.  Two experimental groups are considered: one where
+the table keeps its primary key and one where the key is removed to
+emulate heap storage.
 
-The experiments were performed twice, first without primary key and
-then with primary key \texttt{(l\_orderkey, l\_linenumber).}
+\section{Experimental Evaluation}
+\subsection{Experimental Setup}
+Both experiments run on the same bare-metal Linux server
+(\texttt{5.19.12-1.el8.elrepo.x86\_64}, 64 CPU cores, 256~GB memory) with
+a 100~GB MatrixOne buffer cache and all data stored on local disks.  We
+load the TPCH \texttt{lineitem} table, take a snapshot, and clone two
+tables: \texttt{T1} (reference) and \texttt{T2} (editable).  Branch
+operations refer to MatrixOne's native \texttt{SNAPSHOT DIFF} and
+\texttt{SNAPSHOT MERGE}.
 
-TODO: really do the work.
+Experiment~1 uses the 1\,TB \texttt{lineitem} dataset (approximately
+6 billion rows) and evaluates snapshot diff/merge with and without
+primary keys.  Experiment~2 scales the table to 100\,GB (about 600
+million rows), keeps the primary key, and compares snapshot diff/merge
+against SQL implementations.  Experiment~3 reuses the 100\,GB dataset to
+simulate four concurrent users cloning from \texttt{T0}, updating disjoint
+regions, and merging back.  The workloads differ in update locality:
+Experiment~1 samples from roughly a 5\% band of the hash space, whereas
+Experiment~2 (and the collaborative Experiment~3) widen the band to about
+10\%, forcing more data objects to be touched per batch.
+
+For each setup (Experiment~1 and Experiment~2) we generate three conflict-free update batches by
+modifying random rows in \texttt{T2} only:
+
+\begin{itemize}
+\item \textbf{C1}: update 1{,}000 rows.
+\item \textbf{C2}: update 100{,}000 rows.
+\item \textbf{C3}: update 10{,}000{,}000 rows.
+\end{itemize}
+
+The base table \texttt{T1} remains untouched so that diff and merge see
+only one sided changes.  For the collaborative workload (Experiment~3), four tables
+\texttt{T1}--\texttt{T4} follow the same sampling procedure while targeting
+adjacent, non-overlapping key ranges.
+
+\subsection{Methodology}
+Experiment~1 and Experiment~2 follow the same execution procedure on
+\texttt{T1} (reference) and \texttt{T2} (editable):
+\begin{enumerate}
+\item Apply the update script to \texttt{T2}.
+\item Record the latency of \texttt{SNAPSHOT DIFF
+      T2\{snapshot='sn\_c'\} AND T1\{snapshot='sn\_b'\}}.
+\item Record the latency of \texttt{SNAPSHOT MERGE TABLE T1 FROM
+      T2\{snapshot='sn\_c'\}}.
+\item Restore both tables to the common snapshot and repeat.
+\end{enumerate}
+Each configuration is repeated five times; we report the mean wall-clock
+time while retaining per-run samples for later statistical analysis.
+Caches are warmed once before the measurement loop to reduce start-up
+variance.  In the notation above, \texttt{sn\_b} denotes the base
+snapshot shared by both tables and \texttt{sn\_c} denotes the clone
+snapshot captured after applying the updates.  Unless noted otherwise,
+reported latencies exclude the first (cold) run so that averages reflect
+steady-state performance; the initial measurements are retained
+separately to illustrate cold-start costs.
+
+In Experiment~3, four workers perform the same steps on \texttt{T1}--\texttt{T4} concurrently. For Experiment~3 we clone \texttt{T0}\{\texttt{sp\_base}\} to \texttt{T1}--\texttt{T4} once,
+launch updates on all four tables in parallel, measure each user's \texttt{SNAPSHOT MERGE} back into \texttt{T0}.
+
+\subsection{Reference SQL Implementations}
+For completeness we list the SQL equivalents used to verify the
+semantics of diff and merge, although only the native snapshot
+operations are timed.  Random update batches are derived using a helper
+table that samples keys with a \texttt{CRC32} predicate scaled to the
+desired cardinality $C_x$:
+\begin{lstlisting}[label=lst:random-keys,caption=Sampling Keys for Update Batches]
+CREATE TABLE rnd_keys (
+  l_orderkey BIGINT,
+  l_linenumber INT,
+  PRIMARY KEY (l_orderkey, l_linenumber)
+);
+
+INSERT INTO rnd_keys
+SELECT l_orderkey, l_linenumber
+FROM lineitem
+WHERE CRC32(CONCAT(l_orderkey, ':', l_linenumber))
+      < (Cx / 6e9) * 2^32
+LIMIT Cx;
+
+UPDATE T2 AS l
+JOIN (
+  SELECT l_orderkey, l_linenumber
+  FROM rnd_keys
+  ORDER BY l_orderkey, l_linenumber
+  LIMIT Cx
+) AS b
+ON l.l_orderkey = b.l_orderkey
+AND l.l_linenumber = b.l_linenumber
+SET l.l_discount = l.l_discount + 0.01;
+\end{lstlisting}
+The \texttt{lineitem} composite key $(l\_orderkey,l\_linenumber)$ is
+close to uniform, so the hash predicate selects a nearly uniform slice.
+We still order the filtered keys to produce a deterministic range, but
+the predicate keeps the sort affordable compared with scanning the full
+table.  By tuning the cutoff, we control the working set: the 1\,TB study
+draws from roughly the top 5\% of the hash space, whereas the 100\,GB
+study widens the band to about 10\%, forcing MatrixOne to touch more data
+objects during diff/merge.
+\begin{lstlisting}[label=lst:diff-sql,caption=SQL Reference for Diff]
+WITH union_t AS (
+  SELECT -1 AS cnt, col_1, col_2, col_3
+  FROM T1{snapshot='sn_b'}
+  UNION ALL
+  SELECT 1 AS cnt, col_1, col_2, col_3
+  FROM T2{snapshot='sn_c'}
+)
+SELECT SUM(cnt) AS diff_cnt, col_1, col_2, col_3
+FROM union_t
+GROUP BY col_1, col_2, col_3
+HAVING SUM(cnt) <> 0;
+\end{lstlisting}
+\begin{lstlisting}[label=lst:merge-sql,caption=SQL Reference for Merge]
+DELETE FROM T1 AS tgt
+WHERE tgt.pk IN (
+  SELECT b.pk
+  FROM T1{snapshot='sn_b'} AS b
+  LEFT JOIN T2{snapshot='sn_c'} AS c USING (pk)
+  WHERE c.pk IS NULL
+);
+
+INSERT INTO T1(pk, col_1, col_2, col_3)
+SELECT c.pk, c.col_1, c.col_2, c.col_3
+FROM T2{snapshot='sn_c'} AS c
+LEFT JOIN T1{snapshot='sn_b'} AS b USING (pk)
+WHERE b.pk IS NULL
+   OR (c.col_1, c.col_2, c.col_3)
+      <> (b.col_1, b.col_2, b.col_3);
+\end{lstlisting}
+For heap tables the same pattern applies with surrogate row identifiers
+replacing primary keys.
+
+\subsection{Experiment 1: Snapshot Diff/Merge on 1\,TB}
+Tables~\ref{tab:latency-nopk} and \ref{tab:latency-pk} report the
+steady-state latency (seconds, excluding the cold run) for MatrixOne
+snapshot diff/merge (branch operations) on the 1\,TB dataset, with and
+without primary keys.  The corresponding per-run measurements appear in
+Tables~\ref{tab:nopk-runs}--\ref{tab:pk-runs} to highlight cold-start
+effects.  All diff entries refer to \texttt{SNAPSHOT DIFF T2} against
+\texttt{T1}, and merge entries refer to \texttt{SNAPSHOT MERGE TABLE T1
+FROM T2}.
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), No Primary Key}
+  \label{tab:latency-nopk}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.24 & 0.85 & 26.94 \\
+    Merge & 0.53 & 1.74 & 84.47 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), With Primary Key}
+  \label{tab:latency-pk}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.07 & 0.46 & 53.05 \\
+    Merge & 0.50 & 1.76 & 150.04 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{No Primary Key: Per-run Latencies (s)}
+  \label{tab:nopk-runs}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.301 & 0.235 & 0.240 & 0.255 & 0.238 \\
+    Diff C2  & 1.144 & 0.864 & 0.882 & 0.849 & 0.796 \\
+    Diff C3  & 26.464 & 26.903 & 27.059 & 27.362 & 26.421 \\
+    Merge C1 & 0.566 & 0.494 & 0.451 & 0.567 & 0.605 \\
+    Merge C2 & 1.443 & 1.775 & 1.784 & 1.712 & 1.677 \\
+    Merge C3 & 84.404 & 84.689 & 84.951 & 84.827 & 83.426 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{With Primary Key: Per-run Latencies (s)}
+  \label{tab:pk-runs}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.350 & 0.066 & 0.072 & 0.073 & 0.072 \\
+    Diff C2  & 0.505 & 0.511 & 0.473 & 0.448 & 0.404 \\
+    Diff C3  & 61.710 & 54.125 & 51.014 & 51.934 & 55.141 \\
+    Merge C1 & 0.501 & 0.236 & 0.576 & 0.587 & 0.621 \\
+    Merge C2 & 1.499 & 1.751 & 1.748 & 1.712 & 1.829 \\
+    Merge C3 & 161.249 & 153.668 & 151.312 & 149.762 & 145.412 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Experiment 1 Discussion}
+Primary keys lower diff latency for the smallest batch (0.24\,s vs.
+0.07\,s) because the heap configuration must hash full rows.  As the
+modified portion grows, the cost of backfilling values from tombstones
+and deduplicating updates outweighs the hashing advantage, so heap
+tables become faster for medium and large batches.  Merge times are
+higher than diff times because each merge performs the diff and then
+applies updates to \texttt{T1}.
+
+\subsection{Experiment 2: Snapshot Diff/Merge vs.\ SQL on 100\,GB}
+To compare MatrixOne snapshot diff/merge (branch operations) with SQL
+emulation, we repeat the tests on the same hardware using the TPCH
+\texttt{lineitem} table scaled to 100\,GB (approximately 600 million
+rows) with primary keys enabled.  The sampling predicate widens the
+candidate band to roughly 10\% of the hash space, so MatrixOne must load
+more data blocks before applying diff/merge.  Each scenario is executed
+five times; averages below exclude the first run to remove cold-start
+effects.
+
+\begin{table}[h]
+  \centering
+  \caption{Average Latency (s), Branch vs.\ SQL (PK, 100\,GB)}
+  \label{tab:branch-sql-avg}
+  \begin{tabular}{lcccccc}
+    \toprule
+    & \multicolumn{3}{c}{Branch Operations} & \multicolumn{3}{c}{SQL Emulation} \\
+    \cmidrule(lr){2-4} \cmidrule(lr){5-7}
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \midrule
+    Diff  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
+    Merge & 0.23 & 6.92 & 125.33 & 548.25 & 500.00 & 510.00 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Branch Operations (PK, 100\,GB): Per-run Latencies (s)}
+  \label{tab:branch-sql-runs-branch}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 0.08 & 0.07 & 0.11 & 0.08 & 0.07 \\
+    Diff C2  & 1.27 & 1.59 & 1.34 & 1.58 & 1.30 \\
+    Diff C3  & 27.93 & 25.75 & 23.70 & 30.40 & 28.44 \\
+    Merge C1 & 0.20 & 0.24 & 0.25 & 0.22 & 0.21 \\
+    Merge C2 & 6.89 & 7.04 & 6.99 & 6.88 & 6.77 \\
+    Merge C3 & 158.00 & 130.66 & 124.31 & 123.89 & 122.44 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{SQL Emulation (PK, 100\,GB): Per-run Latencies (min:sec)}
+  \label{tab:branch-sql-runs-sql}
+  \begin{tabular}{lccccc}
+    \toprule
+    Scenario & Run1 & Run2 & Run3 & Run4 & Run5 \\
+    \midrule
+    Diff C1  & 10:55 & 11:11 & 11:29 & 11:50 & 12:08 \\
+    Diff C2  & 09:26 & 09:47 & 10:03 & 10:18 & 10:42 \\
+    Diff C3  & 09:09 & 10:57 & 12:07 & 11:12 & 10:48 \\
+    Merge C1 & 08:43 & 08:51 & 09:02 & 09:13 & 09:27 \\
+    Merge C2 & 07:51 & 08:07 & 08:15 & 08:26 & 08:32 \\
+    Merge C3 & 08:34 & 08:20 & 09:04 & 08:41 & 07:55 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Experiment 2 Discussion}
+Snapshot diff/merge outperforms the SQL emulation by several orders of
+magnitude when the change set is small; a 1{,}000-row diff finishes in
+roughly 0.08\,s compared with about 11 minutes for the SQL pipeline.  As
+the modified fraction grows, both approaches approach the cost of a full
+scan (C3 diff takes 27\,s vs.\ 11 minutes), yet snapshot merge still
+completes in about two minutes, whereas SQL merge needs 8--9 minutes.
+The SQL workflow scans and aggregates large intermediate tables, while
+snapshot diff/merge only reads the changed objects and applies updates
+directly to the target.  Post–cold-start variance stays small, indicating
+the performance gap is algorithmic rather than cache related.
+\subsection{Experiment 3: Concurrent Snapshot Diff/Merge}
+To evaluate collaborative workflows, we simultaneously launch four
+sessions that clone \texttt{T0\{snapshot='sp\_base'\}} into
+\texttt{T1}, \texttt{T2}, \texttt{T3}, and \texttt{T4}.  Each session
+updates 600{,}000 rows in parallel and then merges back into
+\texttt{T0}.  The test uses the 100\,GB dataset and the same hardware as
+the previous experiments.  In Scenario~A, key ranges are disjoint: the
+four updates tile the 10\% hash band introduced in Experiment~2, so
+merges proceed without conflicts.
+
+Table~\ref{tab:collab-nonoverlap} summarizes the observed latency.  Each
+merge includes an automatic diff and commit into \texttt{T0}.  Workers
+whose merge started later experienced additional idle time while waiting
+for earlier transactions to commit.
+
+\begin{table}[h]
+  \centering
+  \caption{Collaborative Snapshot Diff/Merge (Disjoint Ranges, 600K rows per user)}
+  \label{tab:collab-nonoverlap}
+  \begin{tabular}{lcccc}
+    \toprule
+    Worker & Clone (s) & Update (s) & Wait (s) & Merge (s) \\
+    \midrule
+    \texttt{T1} & 0.09 & 73.39 & 0.00 & 12.83 \\
+    \texttt{T2} & 0.13 & 79.62 & 31.60 & 17.23 \\
+    \texttt{T3} & 0.11 & 74.97 & 15.23 & 13.35 \\
+    \texttt{T4} & 0.12 & 77.74 & 32.80 & 17.21 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:collab-timeline} visualizes the relative start time and
+duration of each phase.  Each clone finishes within 0.15\,s; the update
+stage lasts longer (about 75\,s) because every session uses
+\texttt{GROUP BY} on the primary key to carve out disjoint regions,
+which triggers a full-table sort.  Since these regions do not overlap,
+merges run sequentially on \texttt{T0} without conflicts, and the final
+table contains all four batches (exactly 2.4 million updated rows).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\linewidth]{e3a.png}
+  \Description{Timeline showing four concurrent users cloning from T0, updating 600K rows, and merging back sequentially into T0 with merge order T1, T3, T4, T2.}
+  \caption{Concurrent snapshot diff/merge timeline (Scenario~A, disjoint key ranges).}
+  \label{fig:collab-timeline}
+\end{figure}
+
+\subsection{Experiment 3 Discussion}
+Merge throughput is primarily limited by the serialized commit window:
+each diff/merge pair finishes in under 18 seconds, but later sessions
+must wait for earlier commits to complete.  The test uses disjoint key
+ranges to avoid conflicts; if updates overlap, \texttt{SNAPSHOT MERGE}
+offers three built-in policies—\texttt{FAIL} aborts, \texttt{SKIP} keeps
+\texttt{T0}'s version, and \texttt{ACCEPT} applies the branch version.
+Applications can layer more elaborate, case-specific resolutions (for
+example, column-wise merges or manual review queues) on top of these
+primitives.  MatrixOne's branch workflow therefore provides the ACID
+foundation, letting developers concentrate on business logic instead of
+reimplementing data versioning mechanics.
+
+\subsection{Discussion}
+Merge latency is consistently higher than diff because each merge
+comprises a diff step between \texttt{T2} and \texttt{T1} followed by
+updates applied to \texttt{T1}.  The relative performance between the
+primary-key and heap configurations is shaped by MatrixOne's storage
+layout.  Data objects and tombstone objects are stored separately, so an
+update yields tombstones that only contain the primary key (or fake
+primary key).  Reconstructing the full row therefore requires a lookup
+into the base table.  In the primary-key setup the lookup must probe a
+composite key; because MatrixOne currently does not support predicates
+like \texttt{(pk1, pk2) IN ((x1, x2), (y1, y2))}, the execution rewrites
+the lookup as a join on \texttt{VALUES}, which is more expensive than
+the direct fake-key lookup used by the heap table.  The subsequent merge
+stage performs similar lookups to update \texttt{T1}, and the primary-key
+case needs to deduplicate incoming rows before applying updates, further
+slowing the write phase.
+
+On the other hand, diff on the heap table must compute full-row hashes
+because no key is available, whereas the primary-key case hashes only
+the key.  When the change set is small (C1) the hashing overhead
+dominates, so the primary-key configuration is faster.  As the modified
+portion grows, the cost of key lookups and deduplication takes over and
+the heap table becomes faster despite the heavier hashing.
+
+These experiments capture the behavior on a single MatrixOne node.
+MatrixOne is a distributed system, and future work will parallelize
+diff/merge across multiple compute nodes to further reduce end-to-end
+latency.
+
+On the 100\,GB workload, the SQL implementations must join and group the
+entire table to identify differences, so their latency stays near the
+full-table scan cost (8--12 minutes) regardless of the change-set size.
+SQL merges are slightly faster than SQL diffs because they perform
+key-based updates after identifying candidate rows, whereas the diff
+path aggregates all columns.  Native branch operations remain two to
+three orders of magnitude faster on small and medium batches; the gap
+narrows as updates approach the scale of a full scan, where both methods
+are bound by the cost of reading most of the table.
+
+Because the second experiment samples keys from a wider 10\% band, even
+the smaller change sets touch many more data blocks than the 1\,TB
+workload (5\% band).  Branch-operation latencies for C1/C2 are therefore
+higher in Experiment~2 despite the smaller base table, underscoring how
+MatrixOne's object layout couples cost to the breadth of modified key
+ranges.
 
 \section{Conclusion and Future Work}
 MatrixOne has a powerful snapshot system and based on this, we have 
