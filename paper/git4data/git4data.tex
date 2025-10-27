@@ -3,6 +3,7 @@
 \usepackage[english]{babel}
 \usepackage{graphicx}
 \usepackage{svg}
+\usepackage{tikz}
 
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily,
@@ -626,13 +627,14 @@ version control on such a table, it is generally advised to make
 schema changes on a table before cloning it. 
 
 
-\section{Experimental Results}
+We evaluate MatrixOne's snapshot-based branching across three workloads: 1\,TB with/without primary keys, 100\,GB with SQL comparisons, and a 100\,GB collaborative test with four concurrent users.
 We evaluate MatrixOne's snapshot-based branching by measuring
 \texttt{SNAPSHOT DIFF} and \texttt{SNAPSHOT MERGE} latencies on large
 analytical tables.  Two experimental groups are considered: one where
 the table keeps its primary key and one where the key is removed to
 emulate heap storage.
 
+\section{Experimental Evaluation}
 \subsection{Experimental Setup}
 Both experiments run on the same bare-metal Linux server
 (\texttt{5.19.12-1.el8.elrepo.x86\_64}, 64 CPU cores, 256~GB memory) with
@@ -646,12 +648,14 @@ Experiment~1 uses the 1\,TB \texttt{lineitem} dataset (approximately
 6 billion rows) and evaluates snapshot diff/merge with and without
 primary keys.  Experiment~2 scales the table to 100\,GB (about 600
 million rows), keeps the primary key, and compares snapshot diff/merge
-against SQL implementations.  The two workloads differ in update
-locality: Experiment~1 samples from roughly a 5\% band of the hash
-space, and Experiment~2 widens the band to about 10\% so that more data
-objects must be touched per batch.
+against SQL implementations.  Experiment~3 reuses the 100\,GB dataset to
+simulate four concurrent users cloning from \texttt{T0}, updating disjoint
+regions, and merging back.  The workloads differ in update locality:
+Experiment~1 samples from roughly a 5\% band of the hash space, whereas
+Experiment~2 (and the collaborative Experiment~3) widen the band to about
+10\%, forcing more data objects to be touched per batch.
 
-For each setup we generate three conflict-free update batches by
+For each setup (Experiment~1 and Experiment~2) we generate three conflict-free update batches by
 modifying random rows in \texttt{T2} only:
 
 \begin{itemize}
@@ -661,11 +665,13 @@ modifying random rows in \texttt{T2} only:
 \end{itemize}
 
 The base table \texttt{T1} remains untouched so that diff and merge see
-only one sided changes.
+only one sided changes.  For the collaborative workload (Experiment~3), four tables
+\texttt{T1}--\texttt{T4} follow the same sampling procedure while targeting
+adjacent, non-overlapping key ranges.
 
 \subsection{Methodology}
-Both experiments follow the same execution procedure on \texttt{T1}
-(reference) and \texttt{T2} (editable):
+Experiment~1 and Experiment~2 follow the same execution procedure on
+\texttt{T1} (reference) and \texttt{T2} (editable):
 \begin{enumerate}
 \item Apply the update script to \texttt{T2}.
 \item Record the latency of \texttt{SNAPSHOT DIFF
@@ -683,6 +689,9 @@ snapshot captured after applying the updates.  Unless noted otherwise,
 reported latencies exclude the first (cold) run so that averages reflect
 steady-state performance; the initial measurements are retained
 separately to illustrate cold-start costs.
+
+In Experiment~3, four workers perform the same steps on \texttt{T1}--\texttt{T4} concurrently. For Experiment~3 we clone \texttt{T0}\{\texttt{sp\_base}\} to \texttt{T1}--\texttt{T4} once,
+launch updates on all four tables in parallel, measure each user's \texttt{SNAPSHOT MERGE} back into \texttt{T0}.
 
 \subsection{Reference SQL Implementations}
 For completeness we list the SQL equivalents used to verify the
@@ -716,13 +725,13 @@ AND l.l_linenumber = b.l_linenumber
 SET l.l_discount = l.l_discount + 0.01;
 \end{lstlisting}
 The \texttt{lineitem} composite key $(l\_orderkey,l\_linenumber)$ is
-close to uniform, so the hash filter yields a nearly uniform sample
-without full-table sorting.
-By tuning the cutoff in the predicate, we can further restrict candidate
-keys to a fraction of the table; the 1\,TB study samples from roughly
-the top 5\% of the hash space, whereas the 100\,GB study widens the band
-to about 10\% before drawing $C_x$ rows.  This difference changes how
-many data objects MatrixOne must load during diff/merge.
+close to uniform, so the hash predicate selects a nearly uniform slice.
+We still order the filtered keys to produce a deterministic range, but
+the predicate keeps the sort affordable compared with scanning the full
+table.  By tuning the cutoff, we control the working set: the 1\,TB study
+draws from roughly the top 5\% of the hash space, whereas the 100\,GB
+study widens the band to about 10\%, forcing MatrixOne to touch more data
+objects during diff/merge.
 \begin{lstlisting}[label=lst:diff-sql,caption=SQL Reference for Diff]
 WITH union_t AS (
   SELECT -1 AS cnt, col_1, col_2, col_3
@@ -900,6 +909,78 @@ effects.
     \bottomrule
   \end{tabular}
 \end{table}
+
+\subsection{Experiment 2 Discussion}
+Snapshot diff/merge outperforms the SQL emulation by several orders of
+magnitude when the change set is small; a 1{,}000-row diff finishes in
+roughly 0.08\,s compared with about 11 minutes for the SQL pipeline.  As
+the modified fraction grows, both approaches approach the cost of a full
+scan (C3 diff takes 27\,s vs.\ 11 minutes), yet snapshot merge still
+completes in about two minutes, whereas SQL merge needs 8--9 minutes.
+The SQL workflow scans and aggregates large intermediate tables, while
+snapshot diff/merge only reads the changed objects and applies updates
+directly to the target.  Post–cold-start variance stays small, indicating
+the performance gap is algorithmic rather than cache related.
+\subsection{Experiment 3: Concurrent Snapshot Diff/Merge}
+To evaluate collaborative workflows, we simultaneously launch four
+sessions that clone \texttt{T0\{snapshot='sp\_base'\}} into
+\texttt{T1}, \texttt{T2}, \texttt{T3}, and \texttt{T4}.  Each session
+updates 600{,}000 rows in parallel and then merges back into
+\texttt{T0}.  The test uses the 100\,GB dataset and the same hardware as
+the previous experiments.  In Scenario~A, key ranges are disjoint: the
+four updates tile the 10\% hash band introduced in Experiment~2, so
+merges proceed without conflicts.
+
+Table~\ref{tab:collab-nonoverlap} summarizes the observed latency.  Each
+merge includes an automatic diff and commit into \texttt{T0}.  Workers
+whose merge started later experienced additional idle time while waiting
+for earlier transactions to commit.
+
+\begin{table}[h]
+  \centering
+  \caption{Collaborative Snapshot Diff/Merge (Disjoint Ranges, 600K rows per user)}
+  \label{tab:collab-nonoverlap}
+  \begin{tabular}{lcccc}
+    \toprule
+    Worker & Clone (s) & Update (s) & Wait (s) & Merge (s) \\
+    \midrule
+    \texttt{T1} & 0.09 & 73.39 & 0.00 & 12.83 \\
+    \texttt{T2} & 0.13 & 79.62 & 31.60 & 17.23 \\
+    \texttt{T3} & 0.11 & 74.97 & 15.23 & 13.35 \\
+    \texttt{T4} & 0.12 & 77.74 & 32.80 & 17.21 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:collab-timeline} visualizes the relative start time and
+duration of each phase.  Each clone finishes within 0.15\,s; the update
+stage lasts longer (about 75\,s) because every session uses
+\texttt{GROUP BY} on the primary key to carve out disjoint regions,
+which triggers a full-table sort.  Since these regions do not overlap,
+merges run sequentially on \texttt{T0} without conflicts, and the final
+table contains all four batches (exactly 2.4 million updated rows).
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\linewidth]{e3a.png}
+  \Description{Timeline showing four concurrent users cloning from T0, updating 600K rows, and merging back sequentially into T0 with merge order T1, T3, T4, T2.}
+  \caption{Concurrent snapshot diff/merge timeline (Scenario~A, disjoint key ranges).}
+  \label{fig:collab-timeline}
+\end{figure}
+
+\subsection{Experiment 3 Discussion}
+Merge throughput is primarily limited by the serialized commit window:
+each diff/merge pair finishes in under 18 seconds, but later sessions
+must wait for earlier commits to complete.  The test uses disjoint key
+ranges to avoid conflicts; if updates overlap, \texttt{SNAPSHOT MERGE}
+offers three built-in policies—\texttt{FAIL} aborts, \texttt{SKIP} keeps
+\texttt{T0}'s version, and \texttt{ACCEPT} applies the branch version.
+Applications can layer more elaborate, case-specific resolutions (for
+example, column-wise merges or manual review queues) on top of these
+primitives.  MatrixOne's branch workflow therefore provides the ACID
+foundation, letting developers concentrate on business logic instead of
+reimplementing data versioning mechanics.
+
 \subsection{Discussion}
 Merge latency is consistently higher than diff because each merge
 comprises a diff step between \texttt{T2} and \texttt{T1} followed by
