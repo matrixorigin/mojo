@@ -1,28 +1,78 @@
 \begin{thebibliography}{10}
 
-\bibitem{S3}
-AWS S3.
-\newblock {https://aws.amazon.com/s3/}
+\bibitem{ColumnStore}
+Mike Stonebraker, Daniel J. Abadi, Adam Batkin, et al. C-Store: A Column-oriented DBMS.
+\newblock {Proceedings of the 31st VLDB Conference, 2005}
+
+\bibitem{CVS}
+Concurrent Versions System.
+\newblock {https://www.nongnu.org/cvs/}
 
 \bibitem{Git}
-Git
+Git.
 \newblock {https://git-scm.com}
 
-\bibitem{PostgreSQL}
-PostgreSQL
-\newblock {https://www.postgresql.org/}
+\bibitem{GitLFS}
+Git Large File Storage (git-lfs).
+\newblock {https://github.com/git-lfs/git-lfs}
 
-\bibitem{LSMTree}
-Patrick O'Neil, Edward Cheng, Dieter Gawlick, Elizabeth O'Neil.
-The Log-Structured Merge-Tree (LSM-Tree)
-\newblock {Acta Informatica, Vol 33, Issue 4, 1996}
+\bibitem{GitHub}
+GitHub.com
+\newblock {https://github.com/}
 
 \bibitem{LSFS}
 Mendel Rosenblum, John K. Ousterhout.
 The design and implementation of a log-structured file system.
 \newblock {ACM Transactions on Computer Systems, Vol 10, Issue 1, 1992}
 
-\bibitem{ColumnStore}
-Mike Stonebraker, Daniel J. Abadi, Adam Batkin, et al. C-Store: A Column-oriented DBMS.
-\newblock {Proceedings of the 31st VLDB Conference, 2005}
+\bibitem{LSMTree}
+Patrick O'Neil, Edward Cheng, Dieter Gawlick, Elizabeth O'Neil.
+The Log-Structured Merge-Tree (LSM-Tree)
+\newblock {Acta Informatica, Vol 33, Issue 4, 1996}
+
+\bibitem{MatrixOne}
+MatrixOne
+\newblock {https://www.github.com/matrixorigin/matrixone}
+
+\bibitem{PostgreSQL}
+PostgreSQL
+\newblock {https://www.postgresql.org/}
+
+\bibitem{Raft}
+Diego Ongaro and John Ousterhout.  In Search of an Understandable Consensus Algorithm (Extended Version).
+\newblock {https://raft.github.io/raft.pdf}
+
+\bibitem{RCS}
+Walter Tichy. Design, implementation, and evaluation of a Revision Control System. 
+\newblock{ICSE '82 Proceedings of the 6th International Conference on Software Engineering: 58–67}
+
+\bibitem{S3}
+AWS S3.
+\newblock {https://aws.amazon.com/s3/}
+
+\bibitem{SCCS}
+Marc J. Rochkind. The Source Code Control System
+\newblock {IEEE Transactions on Software Engineering, vol. SE-1, no. 4, pp. 364–370, December 1975}
+
+\bibitem{Snowflake}
+Snowflake
+\newblock {https://www.snowflake.com/}
+
+\bibitem{Supabase}
+Supabase
+\newblock {https://supabase.com/docs/guides/database/overview}
+
+\bibitem{TPCH}
+Transaction Processing Performance Council.
+The TPCH Benchmark.
+\newblock {https://www.tpc.org/tpch/}
+
+\bibitem{VMDK}
+VMware Virtual Disk.  Virtual Disk Format 5.0.
+\newblock {http://www.vmware.com/support/developer/vddk/vmdk\_50\_technote.pdf}
+
+\bibitem{ZFS}
+J. Bonwick and B. Moore. ZFS: The Last Word in File Systems.
+\newblock {http://opensolaris.org/os/community/zfs/docs/zfs\_last.pdf}
+
 \end{thebibliography}
