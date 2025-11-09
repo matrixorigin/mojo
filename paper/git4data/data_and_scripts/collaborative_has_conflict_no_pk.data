@@ -9,12 +9,12 @@
 	branch diff T3 T0: 0.620,0.606,0.638,0.595,0.647  
 	branch diff T4 T0: 0.562,0.547,0.581,0.539,0.572
 	
-	branch merge T1 T0: 0.630,0.603,0.652,0.615,0.645  
-	branch merge T2 T0: 0.580,0.566,0.597,0.555,0.603  
-	branch merge T3 T0: 0.575,0.560,0.599,0.553,0.587  
-	branch merge T4 T0: 0.556,0.539,0.574,0.532,0.569
-	
-	merge T2/T3/T4 into T0: merge diff conflict happend
+
+	branch merge T1 T0: 0.646,0.731,0.735,0.688,0.779
+	branch merge T2 T0: 0.636,0.783,0.643,0.713,0.703
+	branch merge T3 T0: 0.664,0.691,0.688,0.892,0.727
+	branch merge T4 T0: 0.684,0.682,0.711,0.751,0.762
+
 
 
 	sql copy T1: 117.275, 112.584, 119.621, 121.966, 114.930

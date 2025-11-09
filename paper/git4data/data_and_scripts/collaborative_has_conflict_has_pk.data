@@ -8,13 +8,13 @@
 	branch diff T2 T0: 0.081,0.088,0.079,0.087,0.073
 	branch diff T3 T0: 0.081,0.069,0.071,0.079,0.086
 	branch diff T4 T0: 0.076,0.079,0.083,0.079,0.088
-	
-	branch merge T1 T0: 0.193,0.190,0.185,0.171,0.186
-	branch merge T2 T0: 0.124,0.133,0.140,0.157,0.131
-	branch merge T3 T0: 0.128,0.136,0.149,0.154,0.135
-	branch merge T4 T0: 0.129,0.113,0.142,0.156,0.136
 
-	merge T2/T3/T4 into T0: merge diff conflict happend
+
+	branch merge T1 T0: 0.194,0.167,0.180,0.194,0.180
+	branch merge T2 T0: 0.225,0.231,0.238,0.242,0.265
+	branch merge T3 T0: 0.235,0.305,0.257,0.287,0.294
+	branch merge T4 T0: 0.358,0.315,0.289,0.267,0.338
+
 
 
 	sql copy T1: 117.765s, 120.193s, 121.407s, 122.621s, 125.049s
@@ -45,13 +45,13 @@
 	branch diff T2 T0: 0.285,0.257,0.244,0.248,0.270
 	branch diff T3 T0: 0.255,0.251,0.249,0.276,0.353
 	branch diff T4 T0: 0.293,0.249,0.301,0.263,0.278
-	
-	branch merge T1 T0: 0.894,0.864,0.839,0.910,0.952
-	branch merge T2 T0: 0.485,0.535,0.506,0.565,0.549
-	branch merge T3 T0: 0.479,0.571,0.578,0.569,0.631
-	branch merge T4 T0: 0.483,0.478,0.561,0.632,0.666
 
-	merge T2/T3/T4 into T0: merge diff conflict happend
+
+	branch merge T1 T0: 0.793,0.898,0.926,1.013,0.961
+	branch merge T2 T0: 1.287,1.232,1.190,1.253,1.184
+	branch merge T3 T0: 1.379,1.526,1.283,1.444,1.551
+	branch merge T4 T0: 1.317,1.603,1.485,1.465,1.645
+
 
 
 	sql copy T1: 120.193s, 121.407s, 122.621s, 125.049s, 117.765s
@@ -83,12 +83,12 @@
 	branch diff T3 T0: 1.714,1.560,1.314,1.551,1.516
 	branch diff T4 T0: 1.562,1.451,1.471,1.485,1.471
 	
-	branch merge T1 T0: 7.046,6.255,6.199,6.092,6.385
-	branch merge T2 T0: 3.296,3.580,3.434,3.033,3.111
-	branch merge T3 T0: 3.240,3.008,3.610,3.180,3.263
-	branch merge T4 T0: 3.326,3.397,3.394,3.014,3.389
-	
-	merge T2/T3/T4 into T0: merge diff conflict happend
+
+	branch merge T1 T0: 6.236,5.941,6.152,6.138,6.255
+	branch merge T2 T0: 8.556,8.046,7.953,7.577,7.425
+	branch merge T3 T0: 9.667,9.451,9.389,8.836,9.149
+	branch merge T4 T0: 9.976,10.217,9.666,9.867,10.692
+
 
 
 	sql copy T1: 121.407s, 122.621s, 125.049s, 117.765s, 120.193s
@@ -119,12 +119,12 @@
 	branch diff T3 T0: 3.283,3.031,2.953,3.200,3.168
 	branch diff T4 T0: 2.944,2.929,2.873,3.118,2.850
 	
-	branch merge T1 T0: 17.347,16.855,16.339,15.694,15.493
-	branch merge T2 T0: 10.732,10.482,10.209,9.538,10.330
-	branch merge T3 T0: 9.868,10.051,9.229,9.842,9.910
-	branch merge T4 T0: 10.010,10.226,10.328,9.117,9.498
 
-	merge T2/T3/T4 into T0: merge diff conflict happend
+	branch merge T1 T0: 15.244,16.025,15.849,16.244,16.110
+	branch merge T2 T0: 21.282,21.075,20.429,21.595,22.657
+	branch merge T3 T0: 25.214,26.196,26.719,25.627,25.661
+	branch merge T4 T0: 30.870,29.958,30.722,30.523,30.209
+
 
 
 	sql copy T1: 122.621s, 125.049s, 117.765s, 120.193s, 121.407s

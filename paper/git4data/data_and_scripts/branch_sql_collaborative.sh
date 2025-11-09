@@ -269,7 +269,7 @@ SQL
 
 run_branch_merges() {
   for tbl in "${tables[@]}"; do
-    run_mysql "branch merge $tbl T0" "data branch merge $tbl into T0;"
+    run_mysql "branch merge $tbl T0" "data branch merge $tbl into T0 when conflict accept;"
   done
 }
 
