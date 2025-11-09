@@ -1,0 +1,47 @@
+\begin{tikzpicture}
+  \begin{axis}[
+    name=leftAxis,
+    axis y line*=left,
+    axis x line*=bottom,
+    ymin=0,
+    ymajorgrids,
+    xlabel={Change Set},
+    ylabel={BuiltIn Time (s)},
+    xtick=data,
+    symbolic x coords={C1,C2,C3,C4},
+    legend to name=collabMergeLegend,
+    legend style={draw=none, column sep=1ex, legend columns=2, font=\small},
+    width=0.8\linewidth,
+    height=0.5\linewidth,
+    enlarge x limits=0.05
+  ]
+    \addplot+[mark=o, thick, color=blue]
+      coordinates {(C1,0.26) (C2,1.29) (C3,7.98) (C4,22.81)};
+    \addlegendentry{BuiltIn PK Merge}
+    \addplot+[mark=square*, thick, color=teal]
+      coordinates {(C1,0.56) (C2,28.29) (C3,11.37) (C4,66.59)};
+    \addlegendentry{BuiltIn NoPK Merge}
+    \addlegendimage{mark=triangle*, thick, color=red}
+    \addlegendentry{SQL PK Merge}
+    \addlegendimage{mark=diamond*, thick, color=purple}
+    \addlegendentry{SQL NoPK Merge}
+  \end{axis}
+
+  \begin{axis}[
+    axis y line*=right,
+    axis x line=none,
+    ymin=400,
+    ylabel={SQL Time (s)},
+    symbolic x coords={C1,C2,C3,C4},
+    xtick=data,
+    width=0.8\linewidth,
+    height=0.5\linewidth
+  ]
+    \addplot+[mark=triangle*, thick, color=red]
+      coordinates {(C1,421.87) (C2,442.96) (C3,465.11) (C4,488.36)};
+    \addplot+[mark=diamond*, thick, color=purple]
+      coordinates {(C1,421.87) (C2,437.06) (C3,431.99) (C4,432.84)};
+  \end{axis}
+\end{tikzpicture}
+
+\pgfplotslegendfromname{collabMergeLegend}
