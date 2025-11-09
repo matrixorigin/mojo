@@ -1,0 +1,89 @@
+\begin{figure}[h]
+  \centering
+  \definecolor{BuiltInPKColor}{HTML}{1F77B4}
+  \definecolor{BuiltInNoPKColor}{HTML}{2CA02C}
+  \definecolor{SQLPKColor}{HTML}{D62728}
+  \definecolor{SQLNoPKColor}{HTML}{9467BD}
+  \pgfplotsset{
+    tablefiveplot/.style={
+      width=0.88\linewidth,
+      height=0.45\linewidth,
+      symbolic x coords={C1,C2,C3,C4},
+      xtick=data,
+      xminorticks=false,
+      tick label style={font=\small},
+      label style={font=\small},
+    }
+  }
+  \begin{tikzpicture}
+    \begin{axis}[
+      tablefiveplot,
+      axis y line*=left,
+      axis x line*=bottom,
+      ymin=0,
+      ymax=75,
+      xlabel={Change Set},
+      ylabel={Built-in Merge Time (s)},
+      ymajorgrids,
+      grid style={gray!50,dashed},
+      legend columns=2,
+      legend style={
+        font=\small,
+        draw=none,
+        fill=none,
+        at={(0.5,-0.28)},
+        anchor=north,
+      },
+    ]
+      \addplot+[
+        color=BuiltInPKColor,
+        mark=*,
+        mark options={scale=0.65, fill=BuiltInPKColor!25},
+        line width=1.3pt,
+      ]
+        coordinates {(C1,0.26) (C2,1.69) (C3,7.98) (C4,22.81)};
+      \addlegendentry{BuiltIn Merge, PK}
+      \addplot+[
+        color=BuiltInNoPKColor,
+        mark=square*,
+        mark options={scale=0.6},
+        dashed,
+        line width=1.3pt,
+      ]
+        coordinates {(C1,0.56) (C2,11.37) (C3,28.29) (C4,66.59)};
+      \addlegendentry{BuiltIn Merge, NoPK}
+      \addlegendimage{line legend, color=SQLPKColor, mark=triangle*, mark options={scale=0.65, fill=SQLPKColor!25}, dash pattern=on 5pt off 2pt}
+      \addlegendentry{SQL Merge, PK}
+      \addlegendimage{line legend, color=SQLNoPKColor, mark=*, mark options={scale=0.5, fill=SQLNoPKColor!25}, densely dotted}
+      \addlegendentry{SQL Merge, NoPK}
+    \end{axis}
+    \begin{axis}[
+      tablefiveplot,
+      axis y line*=right,
+      axis x line=none,
+      ymin=400,
+      ymax=510,
+      ytick distance=20,
+      ylabel={SQL Merge Time (s)},
+    ]
+      \addplot+[
+        color=SQLPKColor,
+        mark=triangle*,
+        mark options={scale=0.65, fill=SQLPKColor!25},
+        dash pattern=on 5pt off 2pt,
+        line width=1.2pt,
+      ]
+        coordinates {(C1,421.87) (C2,442.96) (C3,465.11) (C4,488.36)};
+      \addplot+[
+        color=SQLNoPKColor,
+        mark=*,
+        mark options={scale=0.5, fill=SQLNoPKColor!25},
+        densely dotted,
+        line width=1.2pt,
+      ]
+        coordinates {(C1,421.87) (C2,437.06) (C3,431.99) (C4,432.84)};
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Line chart summarizing Table~\ref{tab:expmerge4} results.}
+  \label{fig:table5-line}
+\end{figure}

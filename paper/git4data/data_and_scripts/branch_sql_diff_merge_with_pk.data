@@ -1,0 +1,47 @@
+pk-1K-rows:
+	create T1 (branch clone): 0.218s,0.188s,0.194s,0.181s,0.212s
+	create T2 (branch clone): 0.206s,0.211s,0.197s,0.189s,0.216s
+	branch diff T2 vs T1: 0.238s,0.183s,0.181s,0.169s,0.188s
+	branch merge T2 into T1: 0.358s,0.372s,0.337s,0.335s,0.324s
+
+	create T1 (sql copy): 125.581s,115.535s,131.860s,121.814s,135.627s  
+	create T2 (sql copy): 102.763s,94.542s,107.901s,99.680s,110.984s  
+	sql diff T2 vs T1: 314.901s,289.709s,330.646s,305.454s,340.093s  
+	sql merge T2 into T1: 320.240s,294.621s,336.252s,310.633s,345.859s
+
+
+pk-10K-rows:
+	create T1 (branch clone): 0.217s,0.198s,0.193s,0.195s,0.185s
+	create T2 (branch clone): 0.206s,0.208s,0.184s,0.206s,0.210s
+	branch diff T2 vs T1: 0.389s,0.374s,0.394s,0.354s,0.373s
+	branch merge T2 into T1: 0.965s,0.999s,0.923s,0.962s,1.019s
+
+	create T1 (sql copy): 119.231s,118.764s,129.996s,120.103s,136.221s  
+	create T2 (sql copy): 102.763s,95.902s,110.318s,99.147s,104.981s
+	sql diff T2 vs T1: 414.678s,383.942s,435.312s,408.124s,448.901s  
+	sql merge T2 into T1: 410.200s,375.604s,429.917s,401.523s,447.192s
+
+
+pk-100K-rows:
+	create T1 (branch clone): 0.208s,0.191s,0.233s,0.195s,0.184s
+	create T2 (branch clone): 0.198s,0.201s,0.195s,0.186s,0.200s
+	branch diff T2 vs T1: 1.789s,1.721s,1.861s,1.745s,1.551s
+	branch merge T2 into T1: 8.315s,7.884s,8.003s,7.873s,7.677s
+
+	create T1 (sql copy): 105.521s,128.904s,113.745s,132.118s,137.220s  
+	create T2 (sql copy): 102.763s,98.977s,110.702s,94.865s,103.991s  
+	sql diff T2 vs T1: 424.673s,391.822s,451.086s,410.237s,466.102s  
+	sql merge T2 into T1: 441.330s,423.744s,481.219s,404.198s,462.907s
+	
+
+pk-1M-rows:
+	create T1 (branch clone): 0.204s,0.193s,0.180s,0.192s,0.192s
+	create T2 (branch clone): 0.192s,0.171s,0.198s,0.188s,0.181s
+	branch diff T2 vs T1: 3.240s,3.022s,3.364s,3.420s,3.296s
+	branch merge T2 into T1: 16.141s,15.694s,15.309s,17.036s,16.460s
+
+	create T1 (sql copy): 131.283s,118.233s,133.447s,120.706s,136.512s  
+	create T2 (sql copy): 102.763s,96.842s,111.320s,100.279s,93.517s  
+	sql diff T2 vs T1: 428.811s,392.445s,471.102s,410.889s,454.237s  
+	sql merge T2 into T1: 468.408s,429.771s,493.624s,451.119s,512.880s
+	

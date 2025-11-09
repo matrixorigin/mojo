@@ -6,6 +6,8 @@
 \usepackage{graphicx}
 \usepackage{svg}
 \usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily,
@@ -863,6 +865,8 @@ time of four engineers to perform the merge.
   \end{tabular}
 \end{table}
 
+\input{fig_merge_no_conflict}
+
 \subsection{Experiment 4: Collaborative Workload With Conflicts}
 We perform the same experiments as in Experiment \ref{sec:expcollab} 
 but this time, we let updates of two engineers have 10\% 
@@ -894,13 +898,15 @@ resolve the conflicts automatically using the \texttt{ACCEPT} mode.
     \toprule
     \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
-    BuiltIn Merge, PK  & 0.15 & 0.64 & 4.06 & 11.55 \\
+    BuiltIn Merge, PK  & 0.25 & 1.27 & 8.36 & 23.41 \\
     BuiltIn Merge, NoPK  & 0.58 & 8.05 & 11.04 & 66.74 \\
     SQL Merge, PK  & 473.96 & 497.65 & 522.54 & 548.66 \\
     SQL Merge, NoPK  & 448.30 & 451.87 & 459.00 & 457.21 \\
     \bottomrule
   \end{tabular}
 \end{table}
+
+\input{fig_merge_has_conflict}
 
 Built-in diff and merge operations still have excellent performances 
 when there are real conflicts.  Later merges have more conflicts than
