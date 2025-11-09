@@ -6,6 +6,8 @@
 \usepackage{graphicx}
 \usepackage{svg}
 \usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \usepackage{listings}
 \lstset{basicstyle=\ttfamily,
@@ -863,6 +865,8 @@ time of four engineers to perform the merge.
   \end{tabular}
 \end{table}
 
+\input{fig_merge_no_conflict}
+
 \subsection{Experiment 4: Collaborative Workload With Conflicts}
 We perform the same experiments as in Experiment \ref{sec:expcollab} 
 but this time, we let updates of two engineers have 10\% 
@@ -901,6 +905,8 @@ resolve the conflicts automatically using the \texttt{ACCEPT} mode.
     \bottomrule
   \end{tabular}
 \end{table}
+
+\input{fig_merge_has_conflict}
 
 Built-in diff and merge operations still have excellent performances 
 when there are real conflicts.  Later merges have more conflicts than
