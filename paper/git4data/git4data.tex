@@ -669,52 +669,69 @@ schema changes on a table before cloning it.
 
 \section{Experimental Evaluation}\label{sec:eval}
 The experiments are run on a Linux (kernel \texttt{5.19.12}) server
-with 64 cores AMD64 CPU, 256~GB memory, and local SSD disks.  The MatrixOne
-database system is installed on a Kubernetes cluster.
+with one 64 cores Intel Xeon Silver CPU (2.4 GHz), 256~GB memory, 
+and local SSD disks.  The MatrixOne database system is installed 
+on a Kubernetes cluster.
 
 We evaluate MatrixOne's data version control operations 
 using the lineitem table of the TPC-H 100GB dataset \cite{TPCH}.  
 The lineitem table is the largest table in the dataset and contains 
 about 600 million rows.  We will evaluate the performance with 
 two scenarios, one with \texttt{(l\_orderkey, l\_linenumber)} as 
-the primary key (the PK test cases), and one without a primary key (NoPK test cases).  
+the primary key (the PK test cases), and one without 
+a primary key (NoPK test cases).  
 
 \subsection{Experiment 1: Clone}\label{sec:expClone}
-Users can create a new copy of the data by cloning the lineitem table or by
+Users can create a new copy of the data by cloning the lineitem table,
+or by creating a new table T and inserting the data into it
 using the following SQL statement:
 \begin{verbatim}
-  INSERT INTO T AS SELECT * FROM lineitem;
+  INSERT INTO T SELECT * FROM lineitem;
 \end{verbatim}
-Table \ref{tab:clone} shows the cost of clone vs insert, both in terms of time and storage space.
+Table \ref{tab:clone} shows the cost of clone vs insert, both in terms of time 
+and storage space.  Cloning from a snapshot does not require 
+reading the full data of the table, and only need 
+to create a copy of the metadata directory structure.  Inserting using SQL will  
+read and write all the data of the table, incur 34 GB of additional 
+storage space.  Primary key of a table is implemented as the sorting order 
+of the LSM tree in MaxtrixOne, therefore does not incur additional 
+storage overhead.  MatrixOne also carefully optimized batch insert of 
+large amount of data into a table with primary key.
+
 \begin{table}[h]
   \centering
   \caption{Clone vs Insert}
   \label{tab:clone}
   \begin{tabular}{lcc}
     \toprule
-    \textbf{Operation} & \textbf{Time (s)} & \textbf{Space (GB)} \\
+    \textbf{Operation} & \textbf{Time (s)} & \textbf{Space} \\
     \midrule
-    Clone, PK  & 1 & 2 \\
-    Clone, noPK & 3 & 4 \\
-    Insert, PK  & 5 & 6 \\
-    Insert, noPK & 7 & 8 \\
+    Clone, PK  & 0.20 & 314 KB \\
+    Clone, noPK & 0.17 & 294 KB \\
+    Insert, PK  & 114.6 & 34 GB \\
+    Insert, noPK & 119.3 & 34 GB \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{Experiment 2: Snapshot Diff/Merge}
-We generate three change sets of different sizes to table T created in 
-Experiment \ref{sec:expClone}. 
+\subsection{Experiment 2: Diff and Merge}
+Once cloned the lineitem table to table T, data engineers can 
+modify data in table T using SQL.  In this experimenet 
+we generate four change sets of different sizes,
 \begin{itemize}
-\item \textbf{C1}: update 1{,}000 rows.
-\item \textbf{C2}: update 100{,}000 rows.
-\item \textbf{C3}: update 10{,}000{,}000 rows.
+\item \textbf{C1}: update 1{,}000 random rows.
+\item \textbf{C2}: update 10{,}000 random rows.
+\item \textbf{C3}: update 100{,}000 random rows.
+\item \textbf{C4}: update 1{,}000{,}000 random rows.
 \end{itemize}
+
 After applying these changes, we compute the diff between T and the original 
-lineitem table, and then perform merge back from T to lineitem using \texttt{ACCEPT} mode.
-We compare our built-in snapshot diff/merge operations with an implementation
-using SQL.  The diff SQL query is in Listing \ref{lst:diff} and the merge
-SQL query is in Listing \ref{lst:merge-sql}.
+lineitem table, and merge the changes from T to the original lineitem table
+using \texttt{ACCEPT} mode.  We compare our built-in snapshot diff/merge 
+operations with an SQL implementation.  The SQL query for diff is in 
+Listing \ref{lst:diff} and the SQL query for merge is in 
+Listing \ref{lst:merge-sql}.
+
 \begin{lstlisting}[label=lst:merge-sql,caption=SQL for Merge]
 WITH Diff As (
   ... diff SQL query ...
@@ -731,47 +748,76 @@ INSERT INTO lineitem
 SELECT * FROM Diff WHERE diffCnt > 0
 ;
 \end{lstlisting}
+
 We want to point out that the SQL implementations in the case without 
-a primary key actually cheated a bit by assuming external knowledge that 
-\texttt{(l\_orderkey, l\_linenumber)} is in fact the primary key.  
+a primary key actually cheated a bit by assuming the external 
+knowledge that \texttt{(l\_orderkey, l\_linenumber)} is in fact the primary key.  
 This is commonly practiced in OLAP systems.  Without this assumption, 
 writing a performant SQL query to delete only a subset of duplicate 
 rows is not trivial.
+
 \begin{table}[h]
   \centering
-  \caption{BuiltIn vs.\ SQL Time(s)}
-  \label{tab:exp2}
-  \begin{tabular}{lcccccc}
+  \caption{Diff, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expdiff}
+  \begin{tabular}{lcccc}
     \toprule
-    & \multicolumn{3}{c}{BuiltIn} & \multicolumn{3}{c}{SQL} \\
-    \cmidrule(lr){2-4} \cmidrule(lr){5-7}
-    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
-    Diff, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Diff, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Merge, PK & 0.23 & 6.92 & 125.33 & 548.25 & 500.00 & 510.00 \\
-    Merge, NoPK & 0.23 & 6.92 & 125.33 & 548.25 & 500.00 & 510.00 \\
+    BuiltIn Diff, PK  & 0.19 & 0.38 & 1.73 & 3.27 \\
+    BuiltIn Diff, NoPK  & 0.85 & 9.04 & 22.50 & 60.19 \\
+    SQL Diff, PK  & 316.16 & 418.19 & 428.78 & 431.50 \\
+    SQL Diff, NoPK  & 378.19 & 396.61 & 394.13 & 371.74 \\
     \bottomrule
   \end{tabular}
 \end{table}
-Built-in operations are much faster than SQL implementations in all cases.
-We observe that the performance of the built-in operations does not depend on 
-the size of the table, instead, it depends on the size of the changes.
-For a change size of 1 million rows, our built-in merge takes 
-only seconds, which is good enough for a team of data engineers to perform
-PR (pull request) review, CI, and merging PRs. 
+
+\begin{table}[h]
+  \centering
+  \caption{Merge, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expmerge}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
+    \midrule
+    BuiltIn Merge, PK  & 0.35 & 0.97 & 7.95 & 16.13 \\
+    BuiltIn Merge, NoPK  & 0.88 & 12.09 & 22.70 & 68.75 \\
+    SQL Merge, PK  & 321.52 & 412.89 & 442.68 & 471.16 \\
+    SQL Merge, NoPK  & 393.95 & 405.35 & 401.59 & 403.18 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Built-in operations are much faster than SQL implementations in all cases
+this is mainly because of the performance of the built-in operations 
+does not depend on the size of the table, instead, its running time grows
+only with the size of the changes.
+If a table has a primary key, MatrixOne writes the updated rows in sorted 
+runs and maintains the LSM tree structure.  From the SQL diff and merge 
+performance, we observe that primary key helps to improve the performance
+with smaller change sizes but has overhead as the size of changes grows.
+Maintaining primary key constraints is a largely free for built-in diff
+and merge operations because we require that table T and lineitem table 
+has same primary key definition.  Primary key on T guarantees that rows 
+produced from scanning $\Delta$ of T either has a matching deleted 
+row in $\Delta$, or it is a valid inserted row without conflict.
+
+For a change size of 1 million rows, our built-in diff and merge operation
+takes only seconds, which is good enough for a team of data engineers 
+to perform PR (pull request) review, CI, and merging PRs etc. 
 
 \subsection{Experiment 3: Collaborative Workload Without Conflicts}\label{sec:expcollab}
-This experiment simulates a collaborative workload when a team of data engineers are 
-working on the same dataset.  Four data engineers fork the lineitem table to their 
-copy of tables, T1, T2, T3, and T4 respectively.  Each engineer updates 
-their own table and in this experiment, they cooperate with each other
-so that updates of one engineer do not overlap with those of another.
+This experiment simulates a collaborative workload when a team of 
+data engineers are working on the same dataset.  Four data engineers 
+forked their own copies of the lineitem table, T1, T2, T3, and T4 
+respectively.  Each engineer updates their own table and in this 
+experiment, we assume they cooperate with each other
+so that updates of one engineer do not overlap 
+with those of another.  This is a common scenario in data engineering
+to divide their works into non overlapping tasks.
 After all the updates are applied, each engineer merges their changes 
-back to the original table.  
-
-Figure \ref{fig:collab-timeline} shows 
-the timeline of the experiment.  
+back to the original lineitem table.  Figure \ref{fig:collab-timeline} 
+shows the timeline of the experiment.  
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.9\linewidth]{e3a.png}
@@ -779,61 +825,90 @@ the timeline of the experiment.
   \Description{Timeline showing four concurrent users cloning from T0, updating, and merging back.}
   \label{fig:collab-timeline}
 \end{figure}
-Table \ref{tab:collab-avg} shows the average time (s) of four workers.  To fork the tables,
-we compare the built-in clone operation with SQL insert statements as in 
-section \ref{sec:expClone}.  We want to make a note that using insert will incur four 
-times of storage space overhead.
+
+Table \ref{tab:expdiff4} shows the average time of the four engineers 
+to run diff before merging their changes back to the original 
+lineitem table.  Table \ref{tab:expmerge4} shows the average 
+time of four engineers to perform the merge.
 
 \begin{table}[h]
   \centering
-  \caption{Collaborative Snapshot Diff/Merge.  Average Time (s) Of Four Workers}
-  \label{tab:collab-avg}
-  \begin{tabular}{lcccccc}
+  \caption{Diff, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expdiff4}
+  \begin{tabular}{lcccc}
     \toprule
-    & \multicolumn{3}{c}{BuiltIn} & \multicolumn{3}{c}{SQL} \\
-    \cmidrule(lr){2-4} \cmidrule(lr){5-7}
-    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
-    Fork, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Diff, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Merge, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Fork, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Diff, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Merge, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
+    BuiltIn Diff, PK  & 0.08 & 0.28 & 1.36 & 3.04 \\
+    BuiltIn Diff, NoPK  & 0.65 & 8.41 & 28.34 & 58.72 \\
+    SQL Diff, PK  & 438.41 & 460.33 & 483.35 & 507.52 \\
+    SQL Diff, NoPK  & 433.28 & 448.88 & 443.68 & 444.54 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[h]
+  \centering
+  \caption{Merge, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expmerge4}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
+    \midrule
+    BuiltIn Merge, PK  & 0.26 & 1.69 & 7.98 & 22.81 \\
+    BuiltIn Merge, NoPK  & 0.56 & 11.37 & 28.29 & 66.59 \\
+    SQL Merge, PK  & 421.87 & 442.96 & 465.11 & 488.36 \\
+    SQL Merge, NoPK  & 421.87 & 437.06 & 431.99 & 432.84 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Experiment 4: Collaborative Workload With Conflicts}
 We perform the same experiments as in Experiment \ref{sec:expcollab} 
-but with conflicts.  We let updates of two engineers have 10\% 
-overlap on the primary key.
-Table \ref{tab:collab-conflict-avg} shows the average time (s) of four workers.  
-\begin{table}
+but this time, we let updates of two engineers have 10\% 
+overlap on the primary key with each other.  In this experiment, 
+the later merges have real conflicts and we let merges to 
+resolve the conflicts automatically using the \texttt{ACCEPT} mode.
+
+\begin{table}[h]
   \centering
-  \caption{Collaborative Snapshot Diff/Merge.  Average Time (s) Of Four Workers}
-  \label{tab:collab-conflict-avg}
-  \begin{tabular}{lcccccc}
+  \caption{Diff, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expdiff42}
+  \begin{tabular}{lcccc}
     \toprule
-    & \multicolumn{3}{c}{BuiltIn} & \multicolumn{3}{c}{SQL} \\
-    \cmidrule(lr){2-4} \cmidrule(lr){5-7}
-    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C1} & \textbf{C2} & \textbf{C3} \\
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
-    Fork, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Diff, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Merge, PK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Fork, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Diff, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
-    Merge, NoPK  & 0.08 & 1.45 & 27.07 & 699.50 & 612.50 & 676.00 \\
+    BuiltIn Diff, PK  & 0.18 & 0.28 & 1.52 & 3.12 \\
+    BuiltIn Diff, NoPK  & 0.59 & 7.95 & 8.69 & 61.07 \\
+    SQL Diff, PK  & 456.37 & 479.19 & 503.15 & 528.30 \\
+    SQL Diff, NoPK  & 445.42 & 448.96 & 456.04 & 454.27 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\subsection{Discussion}
-We have conducted experiments that simulate some typical data 
-workflows of a data engineer or a team of data engineers. 
+\begin{table}[h]
+  \centering
+  \caption{Merge, BuiltIn vs.\ SQL Time(s)}
+  \label{tab:expmerge42}
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
+    \midrule
+    BuiltIn Merge, PK  & 0.15 & 0.64 & 4.06 & 11.55 \\
+    BuiltIn Merge, NoPK  & 0.58 & 8.05 & 11.04 & 66.74 \\
+    SQL Merge, PK  & 473.96 & 497.65 & 522.54 & 548.66 \\
+    SQL Merge, NoPK  & 448.30 & 451.87 & 459.00 & 457.21 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-
+Built-in diff and merge operations still have excellent performances 
+when there are real conflicts.  Later merges have more conflicts than
+earlier ones due to the overlap of updates accumulates, but, the 
+set of all changed primary keys actually is smaller than those of 
+the experiment of Section \ref{sec:expcollab}.  The scanning and 
+aggregtion on $\Delta$s produces smaller results sets and have 
+better performance in the C4 test case with primary key.
 
 \section{Conclusion and Future Work}
 The AI revolution is driving new requirements and challenges 
@@ -866,7 +941,7 @@ pull requests (PR), conducting code review and using continuous integration
 and deployment (CI/CD).  Each step in data engineering can be 
 traced, debugged, and validated.
  
-Section \ref{sec:discussion} discusses some interesting issues 
+Section \ref{sec:discussion} discussed some interesting issues 
 and possible improvements.  Better or smarter conflict 
 resolution strategies are one of the important areas to work on.
 We will continue to work with customers with real-world use 
