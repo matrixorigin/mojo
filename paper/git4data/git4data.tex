@@ -82,14 +82,29 @@
 %% The abstract is a short summary of the work to be presented in the
 %% article.
 \begin{abstract}
-MatrixOne is a relational database system with a powerful and 
-efficient snapshot system.  Users can perform git-like operations on 
-large amounts of data almost instantly using the snapshot system. 
-This brings the power and convenience of data version control 
-to data engineering in the same way as source code version control 
-systems do for software engineering.  Data engineers can perform 
-branch, diff, revert, bisect, merge, etc., on terabytes of data 
-instantly without fear of losing data or causing data corruption.
+The rapid advancement of artificial intelligence has made data the cornerstone 
+of modern software systems. AI systems require vast amounts of high-quality data 
+for training, fine-tuning, and operation, making data engineering a critical discipline. 
+As data projects become increasingly complex and dynamic, with continuous 
+modification, experimentation, and collaboration, version control for data 
+has become not just convenient but necessary. 
+
+We present a version control system for data implemented in MatrixOne, 
+a relational database system. This system enables git-like operations 
+on database tables, allowing users to branch and fork tables, 
+compute diffs and merge changes between branches, and review, revert, 
+or bisect changes on large datasets almost instantly, 
+without risk of data loss or corruption.
+
+This version control system for data brings the power and convenience 
+of version control to data engineering, just as source code version control 
+systems have transformed software engineering. Teams of data engineers 
+can collaborate on shared datasets using familiar workflows: creating branches, 
+submitting pull requests, conducting reviews, and running CI/CD pipelines, 
+all efficiently and safely. Changes in the development environment are 
+isolated from production in both data integrity and computing resources. 
+Verified changes can be published to production in a single transaction, 
+ensuring data consistency and avoiding service disruptions.
 \end{abstract}
 
 \maketitle
@@ -104,33 +119,32 @@ initial pre-training and subsequent fine-tuning to in-service prompting, require
 vast amounts of high-quality data to ensure robust performance and accurate outcomes. 
 Consequently, many experts consider data as the fuel that powers the new AI revolution.
 
-The ever-increasing importance of data to AI systems has given rise 
-to the field of data engineering.  
-A substantial amount of development work in an AI project
+The ever-increasing importance of data to AI systems has given rise to the field of 
+data engineering.  A substantial amount of development work in an AI project
 is actually focused on data processing and feature engineering.  The data used in 
 such AI projects has grown to be much more complex and dynamic than ever before.
-Engineers need not only to analyze static data, but also to clean
-and modify data, to label data (either by humans or by LLMs), and to manage labels.
-An AI project is not only about building code, but more and more often becomes 
-a data project.
+Engineers need not only to analyze static data, but also to clean and modify data, 
+to label data (either by humans or by LLMs), and to manage labels.  An AI project 
+is not only about building code, but more and more often becomes a data project.
 
 Version control systems (VCS) are among the most important tools in a software 
 engineer's daily work.  
 Git \cite{Git} and git services such as GitHub \cite{GitHub} have
 become the de facto standard tools for software engineers to manage their code.  
 However, for data engineers, there is little help.  Managing large amounts of 
-data using a VCS designed for managing code is slow. Tools such as diff and merge 
-in general do not work well for large amounts of data, or even worse, do not work at all.  
-Consequently, data engineers often choose to store billions of records in file systems or in 
+data using a VCS designed for managing code is slow. Tools designed for 
+diff and merge of source code often load the entire dataset into memory, which 
+is not suitable or even worse, not feasible for large datasets.  
+Data engineers often resort to store billions of records in file systems or in 
 object stores such as AWS S3 \cite{S3}.  Modifying such large files and collaborating
 with a team of engineers on the same dataset is difficult, slow, and error-prone.
 
 Database systems offer much more robust and scalable solutions to managing 
-large datasets.  Modifying data using SQL insert, delete, and update is 
+large datasets.  Modifying data using SQL insert, delete, and update statements is 
 much easier, faster, and safer than writing bytes to part of a very large file.  
 Database transactions can support many users to work on a dataset concurrently.  
 Privacy and security are also major concerns in data engineering and database 
-systems usually have mature built-in features like authentication, authorization, role 
+systems have mature built-in features like authentication, authorization, role 
 based access control (RBAC). 
 
 However, data engineers' workflow with data is very different from conventional
@@ -141,12 +155,13 @@ conducting experiments, reverting data to a previous state if experiments fail,
 and finally merging the changes back to the original dataset.  Data engineering is 
 often a team effort, and team members may need to share partial or incremental 
 changes to the dataset.  Changes to datasets need to be reviewed and approved by 
-other team members, and finally published or merged into the production environment. 
+other team members, and finally published and merged into the production environment. 
 Publishing changes to the production environment must be fast and transactional
 to avoid data corruption and service disruptions in production. 
-This entire process is analogous to the well-established "branch-and-merge" model 
-used in software engineering, where developers fork a repository, make modifications 
-in an isolated branch, validate their work through processes like continuous integration (CI) 
+This entire process is developer-centric, analogous to the well-established 
+"branch-and-merge" model used in software engineering where developers 
+fork a repository, make modifications in an isolated branch, validate their 
+work through a code review processes and continuous integration (CI), 
 and subsequently merge the changes back into the main codebase.
 
 MatrixOne \cite{MatrixOne} is a cloud-native relational database system developed 
@@ -767,7 +782,7 @@ rows is not trivial.
     \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
     BuiltIn Diff, PK  & 0.19 & 0.38 & 1.73 & 3.27 \\
-    BuiltIn Diff, NoPK  & 0.85 & 9.04 & 22.50 & 60.19 \\
+    BuiltIn Diff, NoPK  & 0.85 & 22.50 & 9.04 & 60.19 \\
     SQL Diff, PK  & 316.16 & 418.19 & 428.78 & 431.50 \\
     SQL Diff, NoPK  & 378.19 & 396.61 & 394.13 & 371.74 \\
     \bottomrule
@@ -783,7 +798,7 @@ rows is not trivial.
     \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
     BuiltIn Merge, PK  & 0.35 & 0.97 & 7.95 & 16.13 \\
-    BuiltIn Merge, NoPK  & 0.88 & 12.09 & 22.70 & 68.75 \\
+    BuiltIn Merge, NoPK  & 0.88 & 22.70 & 12.09 & 68.75 \\
     SQL Merge, PK  & 321.52 & 412.89 & 442.68 & 471.16 \\
     SQL Merge, NoPK  & 393.95 & 405.35 & 401.59 & 403.18 \\
     \bottomrule
@@ -842,7 +857,7 @@ time of four engineers to perform the merge.
     \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
     BuiltIn Diff, PK  & 0.08 & 0.28 & 1.36 & 3.04 \\
-    BuiltIn Diff, NoPK  & 0.65 & 8.41 & 28.34 & 58.72 \\
+    BuiltIn Diff, NoPK  & 0.65 & 28.34 & 8.41 & 58.72 \\
     SQL Diff, PK  & 438.41 & 460.33 & 483.35 & 507.52 \\
     SQL Diff, NoPK  & 433.28 & 448.88 & 443.68 & 444.54 \\
     \bottomrule
@@ -858,7 +873,7 @@ time of four engineers to perform the merge.
     \textbf{Operation} & \textbf{C1} & \textbf{C2} & \textbf{C3} & \textbf{C4} \\
     \midrule
     BuiltIn Merge, PK  & 0.26 & 1.69 & 7.98 & 22.81 \\
-    BuiltIn Merge, NoPK  & 0.56 & 11.37 & 28.29 & 66.59 \\
+    BuiltIn Merge, NoPK  & 0.56 & 28.29 & 11.37 & 66.59 \\
     SQL Merge, PK  & 421.87 & 442.96 & 465.11 & 488.36 \\
     SQL Merge, NoPK  & 421.87 & 437.06 & 431.99 & 432.84 \\
     \bottomrule
