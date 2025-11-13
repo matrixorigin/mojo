@@ -54,6 +54,13 @@ func OpenDB(port string, dbname string) (*MoDB, error) {
 	return &modb, nil
 }
 
+func OpenDBFull(host, user, passwd, port, dbname string) (*sql.DB, error) {
+	connstr := fmt.Sprintf("\"%s\":%s@tcp(%s:%s)/%s",
+		user, passwd, host, port, dbname)
+
+	return sql.Open("mysql", connstr)
+}
+
 func PyConnStr() string {
 	return fmt.Sprintf("mysql+pymysql://%s:%s@%s:%s/%s",
 		common.GetVar("MOUSER"), common.GetVar("MOPASSWD"),
