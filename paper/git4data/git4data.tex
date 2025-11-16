@@ -79,28 +79,27 @@
 %% The abstract is a short summary of the work to be presented in the
 %% article.
 \begin{abstract}
-The rapid advancement of artificial intelligence has made data the cornerstone 
-of modern software systems. AI systems require vast amounts of high-quality data 
-for training, fine-tuning, and operation, making data engineering a critical discipline. 
-As data projects become increasingly complex and dynamic, with continuous 
-modification, experimentation, and collaboration, version control for data 
-has become not just convenient but necessary. 
+The rapid advancement of artificial intelligence has elevated data to a cornerstone 
+of modern software systems. As data projects become increasingly complex and dynamic, 
+version control for data has become essential rather than merely convenient. 
+
+Existing version control systems designed for source code are inadequate for large-scale 
+data management, as they often require loading entire datasets into memory for diff and merge 
+operations. Database systems, while providing robust data management capabilities, lack 
+native support for version control operations such as diff and merge between data forks.
 
 We present a version control system for data implemented in MatrixOne, 
-a relational database system. This system enables git-like operations 
-on database tables, allowing users to branch and fork tables, 
-compute diffs and merge changes between branches, and review, revert, 
-or bisect changes on large datasets almost instantly, 
-without risk of data loss or corruption.
+a cloud-native relational database system. Our system leverages MatrixOne's 
+immutable storage architecture and multi-version concurrency control (MVCC) to enable 
+git-like operations on database tables at scale. The system supports the complete 
+spectrum of version control operations—clone, tag/branch, diff, merge, and revert—on 
+terabyte-scale datasets with near-instantaneous performance. 
 
-This version control system for data brings the power and convenience 
-of version control to data engineering, just as source code version control 
-systems have transformed software engineering. Teams of data engineers 
-can collaborate on shared datasets using familiar workflows: creating branches, 
-submitting pull requests, conducting reviews, and running CI/CD pipelines, 
-all efficiently and safely. Changes in the development environment are 
-isolated from production in both data integrity and computing resources. 
-Verified changes can be published to production in a single transaction, 
+This version control system enables data engineers to adopt established software engineering 
+workflows: creating branches for isolated experimentation, submitting pull requests for 
+change review, and running CI/CD pipelines, all efficiently and safely. Changes in the 
+development environment are isolated from production in both data integrity and computing 
+resources. Verified changes can be published to production in atomic transactions, 
 ensuring data consistency and avoiding service disruptions.
 \end{abstract}
 
@@ -328,27 +327,36 @@ and users must resolve all the conflicts manually before merging can proceed.
 the version in merge target \texttt{T}, and \texttt{ACCEPT} means that merge 
 will accept the version in merge source \texttt{TClone}.  
 
-Conflicts and resolutions of the conflicts between snapshot $T_{sn2}$ and 
-snapshot $TClone_{sn3}$
-are computed differently depending on whether table \texttt{T} and \texttt{TClone} 
-have primary keys.
-First, let us consider the case that \texttt{T} and \texttt{TClone} have 
-the same primary key on column \texttt{a} and that the \texttt{SNAPSHOT DIFF}
-query has found a potential conflict on a row identified by \texttt{a\_value}.  
-The potential conflict may be due to one of the following scenarios:
+Conflict resolution between snapshot $T_{sn2}$ and 
+snapshot $TClone_{sn3}$ is computed differently depending on whether tables 
+\texttt{T} and \texttt{TClone} have primary keys. The presence of primary keys 
+enables more efficient conflict detection by uniquely identifying rows, whereas 
+tables without primary keys require matching on all column values.
+
+\paragraph{Conflict Resolution with Primary Keys.}
+Consider the case where \texttt{T} and \texttt{TClone} have 
+the same primary key on column \texttt{a}. When \texttt{SNAPSHOT DIFF}
+identifies a potential conflict on a row with primary key \texttt{a\_value}, 
+we must determine whether this represents a true conflict (both branches modified 
+the same row differently) or a false conflict (only one branch modified the row, 
+or both branches made compatible changes). 
+
+To make this determination, we examine the presence of \texttt{a\_value} in three 
+snapshots: the common base revision $T_{sn1}$, the target snapshot $T_{sn2}$, 
+and the source snapshot $TClone_{sn3}$. The following six scenarios cover all 
+possible cases:
 
 \begin{enumerate}
 \item \texttt{a\_value} does not exist in the common base revision $T_{sn1}$ 
-and \texttt{a\_value} does not exist in $TClone_{sn3}$.
+and \texttt{a\_value} does not exist in $TClone_{sn3}$, but exists in $T_{sn2}$.
 This means that a row with primary key \texttt{a\_value} is inserted into
 $T_{sn2}$.  This is a false conflict and merge will keep the row in $T_{sn2}$.
 
-\item \texttt{a\_value} does not exist in the common base revision $T_{sn1}$
-and \texttt{a\_value} does not exist in $T_{sn2}$.
-This means that only $TClone_{sn3}$ has inserted the row with primary key 
-\texttt{a\_value} after branching from the common base revision.  
-This is a false conflict and 
-merge will keep the row in $TClone_{sn3}$.
+\item \texttt{a\_value} does not exist in $T_{sn1}$
+and does not exist in $T_{sn2}$, but exists in $TClone_{sn3}$.
+This indicates that only $TClone_{sn3}$ inserted the row with primary key 
+\texttt{a\_value} after branching. This is a false conflict and 
+merge retains the row from $TClone_{sn3}$.
 
 \item \texttt{a\_value} does not exist in the common base revision 
 $T_{sn1}$ and \texttt{a\_value} exists in both $T_{sn2}$ and $TClone_{sn3}$.
@@ -373,39 +381,49 @@ and only $T_{sn2}$ has deleted or updated this row.
 This is a false conflict and merge will perform the 
 same operation as performed in $T_{sn2}$.
 
-\item \texttt{a\_value} exists in the common base revision $T_{sn1}$
-and neither the version in $T_{sn2}$ nor the version in $TClone_{sn3}$
-has the same value as in the common base revision.
-This is a true conflict.
-\texttt{SKIP} will use the version (which could be a delete operation) 
-in $T_{sn2}$, \texttt{ACCEPT} will use the version in $TClone_{sn3}$ 
-(which also could be a delete operation)
-, and \texttt{FAIL} will cause the merge to fail.
+\item \texttt{a\_value} exists in $T_{sn1}$,
+but the row values in both $T_{sn2}$ and $TClone_{sn3}$ differ from $T_{sn1}$ 
+(and potentially from each other). This indicates that both branches independently 
+modified the same row. This is a true conflict. \texttt{SKIP} retains the version 
+from $T_{sn2}$ (which may be a deletion), \texttt{ACCEPT} retains the version from 
+$TClone_{sn3}$ (which may also be a deletion), and \texttt{FAIL} aborts the merge.
 \end{enumerate}
 
-When table \texttt{T} and \texttt{TClone} do not have a primary key,
-for each row that is found by \texttt{SNAPSHOT DIFF}, there may 
-be multiple rows with the same values in all columns in the 
-common base revision $T_{sn1}$, the snapshot $T_{sn2}$, and the snapshot $TClone_{sn3}$.  
-We use $N_{sn1}$, $N_{sn2}$, and $N_{sn3}$ to denote the number of 
-such rows of the same values.  Let $\delta_T = N_{sn2} - N_{sn1}$ 
-and $\delta_{TClone} = N_{sn3} - N_{sn1}$, we need to consider the 
-following cases:
+The key insight is that a true conflict occurs only when both branches independently 
+modify the same row. Cases where only one branch modifies a row (scenarios 1, 2, 4, and 5) 
+are false conflicts that can be automatically resolved by applying the modification from 
+the appropriate branch.
+
+\paragraph{Conflict Resolution without Primary Keys.}
+When tables \texttt{T} and \texttt{TClone} do not have a primary key,
+rows cannot be uniquely identified. For each set of rows with identical values 
+in all columns identified by \texttt{SNAPSHOT DIFF}, we must consider the 
+cardinality (count) of such rows in each snapshot. 
+
+Let $N_{sn1}$, $N_{sn2}$, and $N_{sn3}$ denote the number of rows with identical 
+values in all columns in the common base revision $T_{sn1}$, snapshot $T_{sn2}$, 
+and snapshot $TClone_{sn3}$, respectively. Let $\delta_T = N_{sn2} - N_{sn1}$ 
+represent the net change in the target branch (positive for inserts, negative for 
+deletes), and $\delta_{TClone} = N_{sn3} - N_{sn1}$ represent the net change in 
+the source branch. The following cases must be considered:
 \begin{enumerate}
-\item $\delta_T = 0$, this is a false conflict and 
-merge keeps $N_{sn3}$ such rows in the merge result.
-\item $\delta_{TClone} = 0$, this is a false conflict and 
-merge keeps $N_{sn2}$ such rows in the merge result.
-\item $\delta_T \neq 0$ and $\delta_{TClone} \neq 0$, we consider this
-case to be a true conflict. \texttt{SKIP} mode
-will keep $N_{sn2}$ rows, \texttt{ACCEPT} mode will keep $N_{sn3}$ rows
-, and \texttt{FAIL} mode will cause the merge to fail.
+\item $\delta_T = 0$ indicates that the target branch 
+made no net change to rows with these values. This is a false conflict and 
+merge retains $N_{sn3}$ such rows (applying the source branch's changes).
+
+\item $\delta_{TClone} = 0$ indicates that the source 
+branch made no net change. This is a false conflict and merge retains $N_{sn2}$ 
+such rows (applying the target branch's changes).
+
+\item $\delta_T \neq 0$ and $\delta_{TClone} \neq 0$ 
+indicates that both branches independently modified the count of rows with these 
+values. This is a true conflict. \texttt{SKIP} mode retains $N_{sn2}$ rows, 
+\texttt{ACCEPT} mode retains $N_{sn3}$ rows, and \texttt{FAIL} mode aborts the merge.
 \end{enumerate}
-In case 3, it is possible to let \texttt{FAIL} mode 
-take a more relaxed resolution on conflicts. For example, sometimes it is
-reasonable to accept $max(N_{sn2}, N_{sn3})$ rows in the final merge result.  
-MatrixOne decided to treat case 3 as a true conflict to avoid 
-accidental loss of work.
+
+In case 3, alternative resolution strategies are possible, such as retaining 
+$max(N_{sn2}, N_{sn3})$ rows. However, MatrixOne treats this as a true conflict 
+requiring explicit resolution to prevent accidental data loss.
 
 \section{Snapshots in MatrixOne}\label{sec:snapshot}
 MatrixOne implements data version control operations using its snapshot system.
@@ -563,9 +581,8 @@ of $\Delta_{sn2}$ and $\Delta_{sn3}$.  Changes in $\Delta_{sn2}$
 and $\Delta_{sn3}$ are considered the same if they are deletions 
 on the same row in $T_{sn1}$, or, insertions of rows with the same 
 values in all columns.  These same changes on both sides are 
-cancelled out by the aggregation.  
-With the diff aggregation result, \texttt{SNAPSHOT DIFF} will return a result 
-by, 
+cancelled out by the aggregation.  With the result of the diff aggregation,
+\texttt{SNAPSHOT DIFF} will compute the result by,
 \begin{enumerate}
 \item flipping the sign of rows from $\Delta_{sn2}$. 
 \item for the tombstone records in the aggregation result, we perform 
@@ -585,44 +602,51 @@ Listing \ref{lst:diff} on the diff aggregation result of $\Delta_{sn2}$ and $\De
 \subsection{Three Way Merge} \label{sec:threewaymerge}
 A three-way merge from \texttt{TClone} to \texttt{T} is implemented by first 
 performing the scan and diff aggregation on $\Delta_{sn2}$ and $\Delta_{sn3}$, 
-as described in Section \ref{sec:diff}.  The plus and minus sign in the diff 
-aggregation tells whether a row is inserted to a snapshot or deleted from the
-common base revision.  In the case that \texttt{T} has a primary key, we can 
-use this information to tell whether a potential conflict is a true conflict 
-(if this primary key appears in both $\Delta_{sn2}$ and $\Delta_{sn3}$)
-or a false conflict (if this primary key appears in only one 
-of $\Delta_{sn2}$ and $\Delta_{sn3}$).
+as described in Section \ref{sec:diff}. The plus and minus signs in the diff 
+aggregation indicate whether a row was inserted into a snapshot or deleted from the
+common base revision. 
 
-There is a rare, but interesting case when one side updated a row 
-in the common base revision to a row with the same values in all columns, 
-that is, the row is simply "moved" to a different position.  We do not 
-consider this "move" as a change of data, therefore we treat conflicts caused by this 
-"move" as a false conflict.  If we do not handle this "move" case, for example,
-if a row is moved from a position in $T_{sn1}$ to a different position in $T_{sn2}$, 
-and the row is updated in $T_{sn3}$, the \texttt{SKIP} resolution strategy would 
-have treated this as a true conflict and would have kept the row from $T_{sn2}$.  
-This in effect would have lost an update in $T_{sn3}$ in the final merge result.
-The move case may happen in case 6 in Section \ref{sec:vcop} 
-and it is the only case that merge will need to read out the full 
-deleted row from the common base revision. In practice, potential conflicts caused 
-by this "move" case is rare and we seldom need to lookup the full deleted row from 
-the common base revision.
+\paragraph{Merge with Primary Keys.}
+When table \texttt{T} has a primary key, we use the diff aggregation result to 
+determine conflict types. A potential conflict is a \textbf{true conflict} if the 
+primary key appears in both $\Delta_{sn2}$ and $\Delta_{sn3}$ (indicating both 
+branches modified the same row). It is a \textbf{false conflict} if the primary key 
+appears in only one of $\Delta_{sn2}$ or $\Delta_{sn3}$ (indicating only one branch 
+modified the row).
 
-When table \texttt{T} does not have a primary key, we perform the same 
-scan of $\Delta_{sn2}$ and $\Delta_{sn3}$ and the same diff aggregation.
-A potential conflict is a true conflict only if a row with the same values 
-in all columns appears in both $\Delta_{sn2}$ and $\Delta_{sn3}$.  
-In this case, merge will need to read out the all columns of the deleted row 
-from the common base revision using physical rowid.  Merge will follow the
-conflict resolution strategy of Section \ref{sec:vcop}, on on the result of
-the diff aggregation.
+\paragraph{Handling Row Movement.}
+A special case occurs when one branch updates a row in the common base revision to 
+have identical values in all columns but at a different position (e.g., due to 
+LSM tree reorganization). This is effectively a "move" operation rather than a 
+data change. We treat conflicts caused by such moves as false conflicts to avoid 
+incorrectly rejecting valid updates from the other branch.
+
+For example, if a row is moved in $T_{sn2}$ (same values, different position) and 
+updated in $T_{sn3}$, without special handling, the \texttt{SKIP} strategy would 
+treat this as a true conflict and keep the moved row from $T_{sn2}$, losing the 
+update from $T_{sn3}$. By detecting that the row values are unchanged in $T_{sn2}$ 
+(only position changed), we correctly identify this as a false conflict and apply 
+the update from $T_{sn3}$.
+
+The move case corresponds to scenario 6 in Section \ref{sec:vcop} and is the only 
+case where merge needs to read the full deleted row from the common base revision 
+to compare values. In practice, such moves are rare (typically occurring only after 
+compaction), so this lookup is seldom needed.
+
+\paragraph{Merge without Primary Keys.}
+When table \texttt{T} does not have a primary key, we perform the same scan and 
+diff aggregation. A potential conflict is a true conflict only if a row with identical 
+values in all columns appears in both $\Delta_{sn2}$ and $\Delta_{sn3}$ (indicating 
+both branches modified rows with these values). In this case, merge reads all columns 
+of deleted rows from the common base revision using physical rowid to determine the 
+conflict resolution strategy as described in Section \ref{sec:vcop}.
 
 \subsection{Two Way Merge}
-Uses do not need to specify the common base revision in the optiolnal 
+Users need not specify the common base revision in the optional 
 \texttt{BASED ON} clause of the \texttt{SNAPSHOT MERGE} statement.  
-In most cases, MatrixOne does proper bookkeeping of snapshot and clone 
-lineages so that the system may be able to find the common base revision of \texttt{T} 
-and \texttt{TClone}.  A two-way merge is actually implemented by a three-way 
+In most cases, MatrixOne maintains proper bookkeeping of snapshot and clone 
+lineages, enabling the system to automatically identify the common base revision 
+of \texttt{T} and \texttt{TClone}. A two-way merge is implemented as a three-way 
 merge with an implicit common base revision.
 
 Sometimes the system may not be able to know the common base revision or 
@@ -635,35 +659,36 @@ objects.  The diff aggregation can be computed much more efficiently than using
 the SQL query in Listing \ref{lst:diff} of Section \ref{sec:vcop} by simply 
 skipping the objects common to both $T_{sn2}$ and $TClone_{sn3}$.
 
-\subsection{Compact and Garbage Collection}
-MatrixOne will not compact and will not garbage collect objects that 
-are referenced by a named snapshot.  However, it is possible for the system to
-schedule a compact or garbage collection (GC) job on table \texttt{T} between 
-\texttt{sn1} and \texttt{sn2}, 
-or on \texttt{TClone} between \texttt{sn1} and \texttt{sn3}.  
-MatrixOne performs
-compaction or GC as a transaction of deleting objects and writing new objects, that is,
-moving all valid rows from several old objects to one or more new objects.  
-Users typically branch from a well-organized snapshot so that compaction of objects
-in the common base revision is rare.  Usually, users will merge the result back to the 
-main branch after some data engineering work, and our merge algorithm will remove 
-all those "moved" rows early on before considering them for conflict resolution by 
-using the diff aggregation described in Section \ref{sec:threewaymerge}.
+\subsection{Compaction and Garbage Collection}
+MatrixOne does not compact or garbage collect objects that 
+are referenced by named snapshots. However, the system may
+schedule compaction or garbage collection (GC) jobs on table \texttt{T} between 
+\texttt{sn1} and \texttt{sn2}, or on \texttt{TClone} between \texttt{sn1} and \texttt{sn3}.  
+
+MatrixOne performs compaction or GC as a transaction that deletes old objects and 
+writes new objects, effectively moving all valid rows from several old objects to 
+one or more new objects. This reorganization can cause rows to appear at different 
+positions even when their values are unchanged.
+
+Users typically branch from well-organized snapshots, so compaction of objects
+in the common base revision is rare. When compaction does occur, the merge algorithm 
+handles it correctly: the diff aggregation described in Section \ref{sec:threewaymerge} 
+identifies rows that were only moved (same values, different positions) and treats 
+them as unchanged, preventing false conflicts.
 
 \subsection{Discussion} \label{sec:discussion}
 We discuss some interesting issues and possible future works related to 
 the implementation of version control operations of MatrixOne.
 
 \subsubsection{Three Way Diff}
-MatrixOne only lets users perform two-way diff with a common base revision at 
-this moment.  A general three-way diff can be implemented efficiently as well
-by letting user specify a \texttt{BASED ON} clause in the \texttt{SNAPSHOT DIFF}
-statment. In fact, the plus and minus sign in the diff aggregation is exactly 
-the information needed to compute three-way diff.  While a general three-way diff 
-is useful in understanding potential conflicts of complex history, we believe 
-end users, when performing tasks such as data change review, will most likely 
-work with the two-way diff result.   Thus we decided not to expose 
-three-way diff to reduce operation complexity and confusion for end users.
+Currently, MatrixOne only supports two-way diff with a common base revision.  
+A general three-way diff can be implemented efficiently by allowing users to specify 
+a \texttt{BASED ON} clause in the \texttt{SNAPSHOT DIFF} statement. In fact, the plus 
+and minus signs in the diff aggregation contain exactly the information needed to compute 
+three-way diff. While a general three-way diff is useful for understanding potential 
+conflicts in complex histories, we believe end users performing tasks such as data change 
+review will most likely work with two-way diff results. Therefore, we decided not to expose 
+three-way diff to reduce operational complexity and potential user confusion.
 
 \subsubsection{Revision Lineage}
 MatrixOne keeps track of the revision lineage of two tables that are one 
@@ -689,13 +714,13 @@ We may consider relax this rule to allow users to automatically resolve
 conflicts at cell level in the future.
 
 \subsubsection{Indices}
-Cloning a table will create a new table with the same schema and primary key definitions.
-ment.  At this moement, cloning a table will not clone secondary indices of the table.  
-Secondary indices of MatrixOne are implemented using auxiliary tables
-that consist of the indexed columns and the primary key columns of 
-the original table. The secondary index is just another table stored and managed as
-an LSM tree like user tables in MatrixOne.  In the future, we may consider cloning 
-the secondary indices of a table by simply cloning the auxiliary index tables.  
+Cloning a table creates a new table with the same schema and primary key definitions.
+Currently, cloning a table does not clone secondary indices.  
+Secondary indices in MatrixOne are implemented using auxiliary tables
+consisting of the indexed columns and the primary key columns of 
+the original table. The secondary index is another table stored and managed as
+an LSM tree, similar to user tables in MatrixOne. In the future, we may consider cloning 
+secondary indices by cloning the auxiliary index tables.  
 
 \subsubsection{Large Object Types}
 MatrixOne supports two kinds of large object types, LOB and datalink.
@@ -837,12 +862,16 @@ is not trivial and will be much slower to execute.
   \end{tabular}
 \end{table}
 
-Table \ref{tab:expdiff} shows the time of the built-in diff and SQL diff operations.
-Built-in diff operations are much faster than the SQL implementations in all cases.
-Built-in diff only need to scan the $\Delta$s and its performance does not depends
-the size of the whole table.  Built-in diff operations is just a query and is optmized 
-by query optimizer.  The C2 and C3 of NoPK case crossed an threshold that optimizer 
-picked up different parallelization strategies.
+Table \ref{tab:expdiff} shows the execution time of built-in diff and SQL diff operations.
+Built-in diff operations are significantly faster than SQL implementations in all cases, 
+achieving 100-500x speedup. The performance advantage stems from scanning only the 
+$\Delta$ objects (changed data) rather than entire tables. Built-in diff operations 
+are implemented as optimized queries that leverage the query optimizer. 
+
+The performance difference between C2 and C3 in the NoPK case reflects the optimizer 
+selecting different parallelization strategies when crossing a threshold in the 
+amount of data being processed. The non-monotonic behavior (C2 taking longer than C3) 
+is due to the optimizer choosing a less efficient strategy for the intermediate size.
 
 \begin{table}[h]
   \centering
@@ -860,17 +889,23 @@ picked up different parallelization strategies.
   \end{tabular}
 \end{table}
 
-Generating the diff set takes the majority of the time for performing merge.
-As expected, Table \ref{tab:expmerge} shows that built-in merge are much 
-faster than SQL implementations in all cases.  From the SQL diff and merge 
-performance, we observe that primary key helps to improve the performance
-with smaller change sizes but has overhead as the size of changes grows.
-The built-in diff and merge operations all perform better with a primary key
-than without.  More efficient lookups is one reason, another reason is that
-the scanning and diff aggregation on $\Delta$s can collapsing operations
-and skip unnecessary checkings. For example, inserted rows produced 
-from scanning $\Delta$ either has a matching deleted row, or it is 
-a valid inserted row without conflict.
+Generating the diff set accounts for the majority of merge execution time.
+As expected, Table \ref{tab:expmerge} shows that built-in merge operations are 
+significantly faster than SQL implementations in all cases, achieving similar 
+speedups as diff operations.
+
+From the SQL diff and merge performance, we observe that primary keys improve 
+performance with smaller change sizes but introduce overhead as change sizes grow, 
+due to index maintenance costs. However, built-in diff and merge operations 
+consistently perform better with primary keys than without, for two reasons:
+\begin{itemize}
+\item \textbf{More efficient lookups:} Primary keys enable direct row identification 
+and faster conflict detection.
+\item \textbf{Operation collapsing:} The scanning and diff aggregation on $\Delta$s 
+can collapse multiple operations on the same primary key into a single logical operation, 
+skipping unnecessary checks. For example, an inserted row from scanning $\Delta$ either 
+has a matching deleted row (indicating an update) or is a valid insert without conflict.
+\end{itemize}
 
 \subsection{Experiment 3: Collaborative Workload Without Conflicts}\label{sec:expcollab}
 This experiment simulates a collaborative workload when a team of 
