@@ -383,8 +383,9 @@ same operation as performed in $T_{sn2}$.
 
 \item \texttt{a\_value} exists in $T_{sn1}$,
 but the row values in both $T_{sn2}$ and $TClone_{sn3}$ differ from $T_{sn1}$ 
-(and potentially from each other). This indicates that both branches independently 
-modified the same row. This is a true conflict. \texttt{SKIP} retains the version 
+(and potentially one of them is a deletion). This indicates that both branches 
+independently modified the same row differently. This is a true conflict. 
+\texttt{SKIP} retains the version 
 from $T_{sn2}$ (which may be a deletion), \texttt{ACCEPT} retains the version from 
 $TClone_{sn3}$ (which may also be a deletion), and \texttt{FAIL} aborts the merge.
 \end{enumerate}
@@ -417,8 +418,8 @@ such rows (applying the target branch's changes).
 
 \item $\delta_T \neq 0$ and $\delta_{TClone} \neq 0$ 
 indicates that both branches independently modified the count of rows with these 
-values. This is a true conflict. \texttt{SKIP} mode retains $N_{sn2}$ rows, 
-\texttt{ACCEPT} mode retains $N_{sn3}$ rows, and \texttt{FAIL} mode aborts the merge.
+values. This is a true conflict. \texttt{SKIP} mode retains $N_{sn2}$ such rows, 
+\texttt{ACCEPT} mode retains $N_{sn3}$ such rows, and \texttt{FAIL} mode aborts the merge.
 \end{enumerate}
 
 In case 3, alternative resolution strategies are possible, such as retaining 
@@ -969,7 +970,9 @@ Later merges have more and more rows in $\Delta_{lineitem}$.  Built-in merges ta
 time because they need to process more data in later merges.  Figure \ref{fig:1M_merge_no_conflict}
 shows the time for merges in the C4 test case (1M updated rows).  The merge times using SQL is 
 dominated by scaning the two large tables and there is no observable difference between
-merges. 
+merges.  In all four merge operations, builtin merge with primary keys are significantly 
+faster than other merge operations.
+
 \input{fig_merge_no_conflict}
 
 \subsection{Experiment 4: Collaborative Workload With Conflicts}
@@ -1017,8 +1020,9 @@ no-conflict experiments.  $\Delta$s scanned and aggregated roughly the
 same amount of rows and conflict resolution do roughly the same amount of
 work regardless of whether the row had a true conflict.  In fact, in the
 case with primary key, there are slightly smaller number of rows after 
-diff aggregation than that in the case without primary key because updates
-on the same primary key are collapsed, but this difference is not significant.
+diff aggregation than that in the case without conflicts as in Section \ref{sec:expcollab},
+ because updates on the same primary key are collapsed.  However, the difference of the
+ number of rows in the diff aggregation result is not significant in this experiment setting.
 Merging using SQL on the other hand, indeed need to perform more works. 
 The delete query using SQL now will need to delete overlapping rows from 
 earlier merges.  Figure \ref{fig:1M_merge_has_conflict}
